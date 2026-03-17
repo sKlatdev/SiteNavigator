@@ -1,4 +1,18 @@
-const API_BASE = "http://localhost:8787/api";
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8787/api"
+).replace(/\/+$/, "");
+
+const VALID_CONTENT_CATEGORIES = new Set([
+  "other",
+  "docs",
+  "release_notes",
+  "guides",
+  "blog",
+  "resources",
+  "help_kb",
+  "demos",
+  "competitor_docs",
+]);
 
 async function handleJson(res) {
   const data = await res.json().catch(() => ({}));
@@ -13,13 +27,13 @@ export async function apiHealth() {
   return handleJson(res);
 }
 
-export async function apiGetSyncStatus() {
-  const res = await fetch(`${API_BASE}/sync/status`);
+export async function apiGetSyncStatus(options = {}) {
+  const res = await fetch(`${API_BASE}/sync/status`, { signal: options.signal });
   return handleJson(res);
 }
 
-export async function apiGetSyncProgress() {
-  const res = await fetch(`${API_BASE}/sync/progress`);
+export async function apiGetSyncProgress(options = {}) {
+  const res = await fetch(`${API_BASE}/sync/progress`, { signal: options.signal });
   return handleJson(res);
 }
 
@@ -31,8 +45,18 @@ export async function apiRunSync() {
   return handleJson(res);
 }
 
-export async function apiGetContent(recentDays = 14) {
-  const res = await fetch(`${API_BASE}/content?recentDays=${recentDays}`);
+export async function apiGetContent(recentDays = 14, options = {}) {
+  const params = new URLSearchParams({ recentDays: String(recentDays) });
+  if (options.q) params.set("q", String(options.q));
+  if (options.category && VALID_CONTENT_CATEGORIES.has(String(options.category))) {
+    params.set("category", String(options.category));
+  }
+  if (options.page) params.set("page", String(options.page));
+  if (options.pageSize) params.set("pageSize", String(options.pageSize));
+
+  const res = await fetch(`${API_BASE}/content?${params.toString()}`, {
+    signal: options.signal,
+  });
   return handleJson(res);
 }
 
@@ -52,6 +76,32 @@ export async function apiImportIndex(payload, mode = "replace") {
 
 export async function apiImportIndexFromPath(filePath, mode = "replace") {
   const res = await fetch(`${API_BASE}/index/import-from-path`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filePath, mode })
+  });
+  return handleJson(res);
+}
+
+export async function apiGetIndexPathInfo(filePath) {
+  const params = new URLSearchParams();
+  if (filePath) params.set("filePath", String(filePath));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/index/path-info${suffix}`);
+  return handleJson(res);
+}
+
+export async function apiSaveIndexToPath(filePath) {
+  const res = await fetch(`${API_BASE}/index/save-to-path`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filePath })
+  });
+  return handleJson(res);
+}
+
+export async function apiLoadIndexFromPath(filePath, mode = "replace") {
+  const res = await fetch(`${API_BASE}/index/load-from-path`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ filePath, mode })

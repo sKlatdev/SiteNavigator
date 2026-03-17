@@ -1,0 +1,73 @@
+name: E2E Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * *"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Start API server
+        run: |
+          cd server
+          nohup npm run dev > ../server-dev.log 2>&1 &
+          echo $! > ../server-dev.pid
+          cd ..
+
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8787/api/health > /dev/null; then
+              echo "Server is healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Server failed to become healthy"
+          cat server-dev.log || true
+          exit 1
+
+      - name: Run keyboard e2e suite
+        working-directory: client
+        run: npm run qa:keyboard:e2e
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f server-dev.pid ]; then
+            kill $(cat server-dev.pid) || true
+          fi
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: client/playwright-report
+          if-no-files-found: ignore

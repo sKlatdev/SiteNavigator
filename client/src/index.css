@@ -1,9 +1,229 @@
-﻿@tailwind base;
+﻿@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Sora:wght@500;600;700&display=swap");
+
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --font-display: "Sora", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-body: "DM Sans", "Helvetica Neue", sans-serif;
+  --text-glass-primary: #0f172a;
+  --text-glass-secondary: #334155;
+}
+
+.dark {
+  --text-glass-primary: #e2e8f0;
+  --text-glass-secondary: #cbd5e1;
+}
+
 body {
-  @apply bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+  @apply text-slate-900 dark:text-slate-100;
+  font-family: var(--font-body);
+  background:
+    radial-gradient(1200px circle at 8% -10%, rgba(20, 184, 166, 0.2), transparent 60%),
+    radial-gradient(900px circle at 90% 10%, rgba(56, 189, 248, 0.16), transparent 60%),
+    linear-gradient(160deg, #e2e8f0 0%, #f8fafc 38%, #dbeafe 100%);
+  min-height: 100vh;
+}
+
+.dark body {
+  background:
+    radial-gradient(1000px circle at 10% -15%, rgba(6, 182, 212, 0.22), transparent 58%),
+    radial-gradient(900px circle at 92% 6%, rgba(59, 130, 246, 0.18), transparent 58%),
+    linear-gradient(165deg, #020617 0%, #0f172a 46%, #111827 100%);
+}
+
+body.content-view-no-fx {
+  background: linear-gradient(160deg, #e8eef6 0%, #f5f9ff 45%, #e8f0ff 100%);
+  background-attachment: fixed;
+}
+
+.dark body.content-view-no-fx {
+  background: linear-gradient(165deg, #020617 0%, #0b1220 48%, #0f172a 100%);
+  background-attachment: fixed;
+}
+
+@layer components {
+  .glass-surface {
+    background: var(--glass-bg);
+    border: 1.5px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur));
+    transition: box-shadow var(--glass-motion-fast), background var(--glass-motion-slow);
+  }
+
+  /* Dense catalog grids can flicker on some Windows/Chrome GPU paths when blur + transitions stack. */
+  .glass-surface-static {
+    background: color-mix(in oklab, var(--glass-bg) 88%, white 12%);
+    border: 1.5px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: none;
+    contain: paint;
+  }
+
+  .catalog-grid {
+    contain: layout paint;
+  }
+
+  .catalog-grid .glass-control {
+    transition: none;
+  }
+
+  .catalog-grid .glass-control:hover {
+    transform: none;
+  }
+
+  /* Strong anti-flicker mode for dense content pages (Explorer and similar views). */
+  .content-stable-paint .glass-surface,
+  .content-stable-paint .glass-surface-static,
+  .content-stable-paint .glass-control,
+  .content-stable-paint .glass-nav-item {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: none;
+    animation: none;
+  }
+
+  .content-stable-paint .glass-control:hover,
+  .content-stable-paint .glass-nav-item:hover {
+    transform: none;
+  }
+
+  .content-stable-paint .fade-in-up {
+    animation: none;
+  }
+
+  /* Escalated fallback: disable compositor-heavy effects app-wide for content pages. */
+  .app-stable-paint .backdrop-blur-xl,
+  .app-stable-paint .glass-surface,
+  .app-stable-paint .glass-surface-static,
+  .app-stable-paint .glass-control,
+  .app-stable-paint .glass-nav-item {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: none;
+    animation: none;
+  }
+
+  .app-stable-paint .glass-surface:hover,
+  .app-stable-paint .glass-control:hover,
+  .app-stable-paint .glass-nav-item:hover {
+    transform: none;
+    box-shadow: var(--glass-shadow);
+  }
+
+  .glass-surface:hover {
+    box-shadow: 0 14px 38px rgba(31, 38, 135, 0.2);
+  }
+
+  .modal-open .glass-surface,
+  .modal-open .glass-control,
+  .modal-open .glass-nav-item {
+    transition: none;
+  }
+
+  .modal-open .glass-surface:hover {
+    box-shadow: var(--glass-shadow);
+  }
+
+  .modal-open .glass-control:hover,
+  .modal-open .glass-nav-item:hover {
+    transform: none;
+  }
+
+  .glass-control {
+    @apply rounded-xl border px-3 py-2 text-sm outline-none;
+    border-color: color-mix(in oklab, white 75%, #94a3b8 25%);
+    background: color-mix(in oklab, var(--glass-bg) 80%, white 20%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: transform var(--glass-motion-fast), border-color var(--glass-motion-fast), box-shadow var(--glass-motion-fast);
+  }
+
+  .glass-control:hover {
+    transform: translateY(-1px);
+  }
+
+  .glass-control:focus-visible {
+    @apply ring-2 ring-cyan-400/60;
+    border-color: rgba(34, 211, 238, 0.7);
+  }
+
+  .dark .glass-control {
+    border-color: color-mix(in oklab, #1e293b 65%, #334155 35%);
+    background: color-mix(in oklab, var(--glass-bg) 84%, #0f172a 16%);
+  }
+
+  .glass-nav-item {
+    @apply w-full rounded-xl px-3 py-2.5 text-left text-sm;
+    transition: background var(--glass-motion-fast), transform var(--glass-motion-fast), color var(--glass-motion-fast);
+  }
+
+  .glass-nav-item:hover {
+    transform: translateX(2px);
+    background: color-mix(in oklab, var(--glass-bg) 88%, white 12%);
+  }
+
+  .glass-nav-item-active {
+    @apply text-white;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.9), rgba(15, 118, 110, 0.9));
+    box-shadow: 0 8px 20px rgba(2, 132, 199, 0.32);
+  }
+
+  .dark .glass-nav-item-active {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.88), rgba(20, 184, 166, 0.88));
+  }
+
+  .fade-in-up {
+    animation: fade-in-up 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  .type-display {
+    @apply text-2xl font-semibold tracking-tight md:text-3xl;
+    font-family: var(--font-display);
+  }
+
+  .type-title {
+    @apply text-xl font-semibold tracking-tight;
+    font-family: var(--font-display);
+  }
+
+  .type-card-title {
+    @apply text-base font-semibold tracking-tight;
+    font-family: var(--font-display);
+  }
+
+  .type-label {
+    @apply text-[11px] uppercase tracking-[0.14em];
+    color: var(--text-glass-secondary);
+  }
+
+  .type-micro {
+    @apply text-xs;
+    color: var(--text-glass-secondary);
+  }
+
+  .text-glass-primary {
+    color: var(--text-glass-primary);
+  }
+
+  .text-glass-secondary {
+    color: var(--text-glass-secondary);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 input,

@@ -25,7 +25,11 @@ const START_POINTS = [
   "https://guide.duo.com",
   "https://resources.duo.com",
   "https://help.duo.com",
-  "https://demo.duo.com"
+  "https://demo.duo.com",
+  "https://help.okta.com",
+  "https://docs.pingidentity.com",
+  "https://learn.microsoft.com/en-us/entra/identity/saas-apps",
+  "https://learn.microsoft.com/en-us/entra/identity/saas-apps/tutorial-list"
 ];
 
 const ALLOWED_HOSTS = [
@@ -33,13 +37,25 @@ const ALLOWED_HOSTS = [
   "guide.duo.com",
   "resources.duo.com",
   "help.duo.com",
-  "demo.duo.com"
+  "demo.duo.com",
+  "help.okta.com",
+  "docs.pingidentity.com",
+  "learn.microsoft.com"
 ];
 
 const MAX_DEPTH_DEFAULT = 3;
 const MAX_DEPTH_BY_HOST = {
-  "help.duo.com": 4
+  "help.duo.com": 4,
+  "help.okta.com": 3,
+  "docs.pingidentity.com": 3,
+  "learn.microsoft.com": 3
 };
+
+const SITEMAP_INDEX_SEEDS = [
+  "https://help.okta.com/Sitemap-index.xml"
+];
+
+const ENTRA_TOC_URL = "https://learn.microsoft.com/en-us/entra/identity/saas-apps/toc.json";
 
 const CONCURRENCY = 8;
 const REQUEST_TIMEOUT_MS = 15000;
@@ -83,12 +99,36 @@ function maxDepthForHost(hostname) {
   return key ? MAX_DEPTH_BY_HOST[key] : MAX_DEPTH_DEFAULT;
 }
 
+function findLocaleSegment(pathname) {
+  const match = String(pathname || "").toLowerCase().match(/\/(?:[a-z]{2}-[a-z]{2})(?=\/|$)/g);
+  if (!match?.length) return "";
+  return match[0].replace(/^\//, "");
+}
+
+function isAllowedEntraSaasPath(pathname) {
+  const p = String(pathname || "").toLowerCase();
+  return /^\/(?:en-us\/)?entra\/identity\/saas-apps(?:\/[^/?#]+)?\/?$/i.test(p);
+}
+
 function isAllowedUrl(urlObj) {
   if (!urlObj) return false;
   if (!["http:", "https:"].includes(urlObj.protocol)) return false;
   if (!hostAllowed(urlObj.hostname)) return false;
 
   const p = (urlObj.pathname || "").toLowerCase();
+  const host = urlObj.hostname.toLowerCase();
+
+  if (host === "help.okta.com" || host.endsWith(".help.okta.com")) {
+    const locale = findLocaleSegment(p);
+    if (locale && locale !== "en-us") return false;
+  }
+
+  if (host === "learn.microsoft.com" || host.endsWith(".learn.microsoft.com")) {
+    if (!isAllowedEntraSaasPath(p)) return false;
+    const locale = /^\/([a-z]{2}-[a-z]{2})(?=\/|$)/i.exec(p)?.[1]?.toLowerCase() || "";
+    if (locale && locale !== "en-us") return false;
+  }
+
   if (
     p.endsWith(".png") || p.endsWith(".jpg") || p.endsWith(".jpeg") ||
     p.endsWith(".gif") || p.endsWith(".svg") || p.endsWith(".pdf") ||
@@ -113,22 +153,59 @@ function normalizeUrl(urlObj) {
   return u.toString();
 }
 
+const NORMALIZED_START_POINTS = Array.from(
+  new Set(START_POINTS.map((u) => normalizeUrl(new URL(u))))
+);
+
 function categorize(urlStr) {
   const u = new URL(urlStr);
   const host = u.hostname.toLowerCase();
   const path = u.pathname.toLowerCase();
+  const isDocsPath = path.startsWith("/docs/") || path === "/docs";
+  const isNotesPath = /(?:^|\/)docs\/(?:[^/?#]+-notes)(?:\/|$)/.test(path);
 
   if (host === "resources.duo.com" || host.endsWith(".resources.duo.com")) return "resources";
   if (host === "guide.duo.com" || host.endsWith(".guide.duo.com")) return "guides";
   if (host === "help.duo.com" || host.endsWith(".help.duo.com")) return "help_kb";
   if (host === "demo.duo.com" || host.endsWith(".demo.duo.com")) return "demos";
+  if (host === "help.okta.com" || host.endsWith(".help.okta.com")) return "competitor_docs";
+  if (host === "docs.pingidentity.com" || host.endsWith(".docs.pingidentity.com")) return "competitor_docs";
+  if ((host === "learn.microsoft.com" || host.endsWith(".learn.microsoft.com")) && /^\/(?:[a-z]{2}-[a-z]{2}\/)?entra\/identity\/saas-apps(?:\/|$)/i.test(path)) return "competitor_docs";
 
   if (host === "duo.com" || host.endsWith(".duo.com")) {
     if (path.startsWith("/blog")) return "blog";
+    if (isDocsPath && isNotesPath) return "release_notes";
     if (path.startsWith("/docs")) return "docs";
   }
 
   return "other";
+}
+
+function deriveVendor(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    const host = u.hostname.toLowerCase();
+    if (host === "help.okta.com" || host.endsWith(".help.okta.com")) return "Okta";
+    if (host === "docs.pingidentity.com" || host.endsWith(".docs.pingidentity.com")) return "Ping Identity";
+    if ((host === "learn.microsoft.com" || host.endsWith(".learn.microsoft.com")) && /^\/(?:[a-z]{2}-[a-z]{2}\/)?entra\/identity\/saas-apps(?:\/|$)/i.test(u.pathname.toLowerCase())) return "Entra";
+  } catch {
+    // Default to Duo for malformed URLs; parser errors are tolerated elsewhere.
+  }
+  return "Duo";
+}
+
+function deriveTags(urlStr, vendor) {
+  const tags = new Set([vendor]);
+  try {
+    const u = new URL(urlStr);
+    const path = u.pathname.toLowerCase();
+    if (vendor === "Okta" && (path === "/wf" || path.startsWith("/wf/"))) {
+      tags.add("Workflow");
+    }
+  } catch {
+    // Keep crawl resilient to malformed URLs.
+  }
+  return Array.from(tags);
 }
 
 function buildPathSummary(urlStr) {
@@ -142,18 +219,36 @@ function buildPathSummary(urlStr) {
   }
 }
 
+function toIsoDate(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function extractLastUpdatedTextCandidate($) {
+  const text = $("body").text().replace(/\s+/g, " ").trim();
+  if (!text) return null;
+
+  const match = text.match(
+    /last\s+updated(?:\s+on)?\s*:?\s*([A-Za-z]{3,9}\s+\d{1,2},\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})/i
+  );
+
+  return match?.[1] || null;
+}
+
 function extractPageLastUpdated($) {
   const candidates = [
     $('meta[property="article:modified_time"]').attr("content"),
     $('meta[name="last-modified"]').attr("content"),
     $('meta[name="last_modified"]').attr("content"),
     $('meta[property="og:updated_time"]').attr("content"),
-    $("time[datetime]").first().attr("datetime")
+    $("time[datetime]").first().attr("datetime"),
+    extractLastUpdatedTextCandidate($)
   ].filter(Boolean);
 
   for (const c of candidates) {
-    const d = new Date(c);
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    const iso = toIsoDate(c);
+    if (iso) return iso;
   }
   return null;
 }
@@ -162,10 +257,10 @@ function summarizeText(text) {
   return (text || "").replace(/\s+/g, " ").trim().slice(0, 260);
 }
 
-function hashContent({ title, summary, pageLastUpdated, category }) {
+function hashContent({ title, summary, pageLastUpdated, category, vendor }) {
   return crypto
     .createHash("sha256")
-    .update(`${title || ""}||${summary || ""}||${pageLastUpdated || ""}||${category || ""}`)
+    .update(`${title || ""}||${summary || ""}||${pageLastUpdated || ""}||${category || ""}||${vendor || ""}`)
     .digest("hex");
 }
 
@@ -218,6 +313,108 @@ async function fetchHtmlWithCache(url, fetchCache) {
   }
 }
 
+async function fetchText(url) {
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "SiteNavigatorIndexer/2.0 (+local-index)"
+      }
+    });
+
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+function extractSitemapLocs(xmlText) {
+  if (!xmlText) return [];
+  const matches = xmlText.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi);
+  return Array.from(matches, (m) => m[1]).filter(Boolean);
+}
+
+function extractTocHrefs(node, hrefs = []) {
+  if (!node || typeof node !== "object") return hrefs;
+  if (typeof node.href === "string") hrefs.push(node.href);
+  if (Array.isArray(node.items)) {
+    for (const child of node.items) extractTocHrefs(child, hrefs);
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) extractTocHrefs(child, hrefs);
+  }
+  return hrefs;
+}
+
+function extractEntraChildUrlsFromHtml(htmlText) {
+  if (!htmlText) return [];
+  const matches = htmlText.matchAll(
+    /(?:https:\/\/learn\.microsoft\.com)?\/en-us\/entra\/identity\/saas-apps\/([a-z0-9-]+)(?=[\/?#"']|$)/gi
+  );
+
+  const urls = new Set();
+  for (const match of matches) {
+    const slug = match?.[1]?.toLowerCase();
+    if (!slug) continue;
+    urls.add(`https://learn.microsoft.com/en-us/entra/identity/saas-apps/${slug}`);
+  }
+
+  return Array.from(urls);
+}
+
+async function discoverSitemapSeedUrls() {
+  const discovered = new Set();
+
+  for (const indexUrl of SITEMAP_INDEX_SEEDS) {
+    const indexXml = await fetchText(indexUrl);
+    if (!indexXml) continue;
+
+    const sitemapUrls = extractSitemapLocs(indexXml);
+    for (const sitemapUrl of sitemapUrls) {
+      const sitemapXml = await fetchText(sitemapUrl);
+      if (!sitemapXml) continue;
+
+      const pageUrls = extractSitemapLocs(sitemapXml);
+      for (const pageUrl of pageUrls) {
+        const resolved = safeUrl(pageUrl);
+        if (!isAllowedUrl(resolved)) continue;
+        discovered.add(normalizeUrl(resolved));
+      }
+    }
+  }
+
+  return Array.from(discovered);
+}
+
+async function discoverEntraTocUrls() {
+  const tocText = await fetchText(ENTRA_TOC_URL);
+  if (!tocText) return [];
+
+  let tocData;
+  try {
+    tocData = JSON.parse(tocText);
+  } catch {
+    return [];
+  }
+
+  const discovered = new Set();
+  const hrefs = extractTocHrefs(tocData, []);
+  for (const href of hrefs) {
+    const resolved = safeUrl(href, "https://learn.microsoft.com/en-us/entra/identity/saas-apps/");
+    if (!isAllowedUrl(resolved)) continue;
+    discovered.add(normalizeUrl(resolved));
+  }
+
+  return Array.from(discovered);
+}
+
 function updatePercent() {
   const denom = Math.max(1, syncProgress.queued);
   syncProgress.percent = Math.min(100, Math.round((syncProgress.processed / denom) * 100));
@@ -226,6 +423,9 @@ function updatePercent() {
 export async function runIncrementalSync() {
   const store = readStore();
   store.fetchCache = store.fetchCache || {};
+  const sitemapSeedUrls = await discoverSitemapSeedUrls();
+  const entraSeedUrls = await discoverEntraTocUrls();
+  const startPoints = Array.from(new Set([...NORMALIZED_START_POINTS, ...sitemapSeedUrls, ...entraSeedUrls]));
 
   const runId = `sync_${Date.now()}`;
   addSyncRun(store, {
@@ -248,19 +448,23 @@ export async function runIncrementalSync() {
     startedAt: nowIso(),
     finishedAt: null,
     processed: 0,
-    queued: START_POINTS.length,
+    queued: startPoints.length,
     scannedCount: 0,
     discoveredCount: 0,
     changedCount: 0,
     unchangedCount: 0,
     skippedNotModifiedCount: 0,
     errorCount: 0,
-    currentUrl: START_POINTS[0] || null,
+    currentUrl: startPoints[0] || null,
     currentDepth: 0,
     percent: 0
   });
 
-  store.content = store.content.map((c) => ({ ...c, active: false }));
+  // Keep only URLs that still match current crawl policy (including locale restrictions).
+  store.content = store.content.map((c) => {
+    const keep = isAllowedUrl(safeUrl(c.url));
+    return { ...c, active: keep };
+  });
 
   const stats = {
     scannedCount: 0,
@@ -271,8 +475,8 @@ export async function runIncrementalSync() {
     errorCount: 0
   };
 
-  const queue = START_POINTS.map((u) => ({ url: u, depth: 0 }));
-  const queuedSet = new Set(START_POINTS);
+  const queue = startPoints.map((u) => ({ url: u, depth: 0 }));
+  const queuedSet = new Set(startPoints);
   const visited = new Set();
 
   async function worker() {
@@ -321,8 +525,10 @@ export async function runIncrementalSync() {
         summarizeText($("main p").first().text() || $("article p").first().text() || $("p").first().text() || "");
       const pageLastUpdated = extractPageLastUpdated($);
       const category = categorize(url);
+      const vendor = deriveVendor(url);
+      const tags = deriveTags(url, vendor);
       const pathSummary = buildPathSummary(url);
-      const contentHash = hashContent({ title, summary, pageLastUpdated, category });
+      const contentHash = hashContent({ title, summary, pageLastUpdated, category, vendor });
 
       const existing = getByUrl(store, url);
       const isNew = !existing;
@@ -333,6 +539,7 @@ export async function runIncrementalSync() {
         (existing.title || "") !== (title || "") ||
         (existing.summary || "") !== (summary || "") ||
         (existing.category || "") !== category ||
+        (existing.vendor || "") !== vendor ||
         (existing.pathSummary || "") !== pathSummary;
 
       const now = nowIso();
@@ -341,6 +548,8 @@ export async function runIncrementalSync() {
         url,
         title,
         category,
+        vendor,
+        tags,
         pathSummary,
         summary,
         pageLastUpdated,
@@ -352,6 +561,21 @@ export async function runIncrementalSync() {
       };
 
       upsertContent(store, row);
+
+      // Learn pages often embed section links in JSON/script payloads instead of direct anchors.
+      if (new URL(url).hostname.toLowerCase() === "learn.microsoft.com") {
+        const discoveredEntraUrls = extractEntraChildUrlsFromHtml(html);
+        discoveredEntraUrls.forEach((candidateUrl) => {
+          const resolved = safeUrl(candidateUrl);
+          if (!isAllowedUrl(resolved)) return;
+          const normalized = normalizeUrl(resolved);
+          if (!visited.has(normalized) && !queuedSet.has(normalized)) {
+            queue.push({ url: normalized, depth: depth + 1 });
+            queuedSet.add(normalized);
+            syncProgress.queued = queuedSet.size;
+          }
+        });
+      }
 
       if (isNew) stats.discoveredCount += 1;
       if (isChanged) stats.changedCount += 1;

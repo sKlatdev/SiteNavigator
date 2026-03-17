@@ -1,7 +1,11 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const dataDir = path.resolve(process.cwd(), "data");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const defaultDataDir = path.resolve(__dirname, "..", "data");
+const dataDir = path.resolve(process.env.SITENAVIGATOR_DATA_DIR || defaultDataDir);
 const dbPath = path.join(dataDir, "index.json");
 
 function nowIso() {

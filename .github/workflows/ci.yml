@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22.x, 24.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Lint client
+        working-directory: client
+        run: npm run lint
+
+      - name: Run client unit tests
+        working-directory: client
+        run: npm run test:unit
+
+      - name: Build client
+        working-directory: client
+        run: |
+          npm run build
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run server tests
+        working-directory: server
+        run: npm run test
+
+      - name: Enforce client coverage thresholds
+        if: matrix.node-version == '22.x'
+        working-directory: client
+        run: npm run test:coverage:check
+
+      - name: Enforce server coverage thresholds
+        if: matrix.node-version == '22.x'
+        working-directory: server
+        run: npm run test:coverage:check
+
+      - name: Server health smoke test
+        working-directory: server
+        run: |
+          node src/server.js &
+          SERVER_PID=$!
+          sleep 3
+          curl -fsS http://localhost:8787/api/health
+          kill $SERVER_PID

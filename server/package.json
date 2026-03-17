@@ -3,17 +3,25 @@
     "version": "1.0.0",
     "private": true,
     "type": "module",
-    "description": "Local crawler/index backend for SiteNavigator (Node 25 compatible)",
+    "description": "Local crawler/index backend for SiteNavigator (Node 22/24 LTS compatible)",
     "engines": {
-      "node": ">=25"
+      "node": ">=22 <25"
     },
     "scripts": {
       "dev": "node src/server.js",
-      "start": "node src/server.js"
+      "dev:local": "node src/server.js --port=8788",
+      "start": "node src/server.js",
+      "test": "node --test",
+      "test:coverage": "c8 --reporter=text-summary --reporter=lcov --include=src/recency.js node --test",
+      "test:coverage:check": "c8 --check-coverage --lines 90 --functions 90 --branches 85 --statements 90 --include=src/recency.js node --test",
+      "index:reset": "node scripts/reset-index.mjs"
     },
     "dependencies": {
       "cheerio": "^1.2.0",
       "cors": "^2.8.5",
       "express": "^4.22.1"
+    },
+    "devDependencies": {
+      "c8": "^10.1.3"
     }
   }

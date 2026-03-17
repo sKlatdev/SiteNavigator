@@ -1,0 +1,23 @@
+/* Glassmorphism design tokens */
+/* Use with Tailwind theme extensions or as CSS variables */
+
+:root {
+  --glass-bg: rgba(255,255,255,0.18);
+  --glass-bg-dark: rgba(30,41,59,0.32);
+  --glass-border: rgba(255,255,255,0.35);
+  --glass-border-dark: rgba(30,41,59,0.45);
+  --glass-blur: 18px;
+  --glass-radius: 1.25rem;
+  --glass-shadow: 0 8px 32px 0 rgba(31,38,135,0.18);
+  --glass-shadow-dark: 0 8px 32px 0 rgba(0,0,0,0.28);
+  --glass-card-padding: 1.5rem;
+  --glass-card-gap: 1.25rem;
+  --glass-motion-fast: 120ms cubic-bezier(0.4,0,0.2,1);
+  --glass-motion-slow: 320ms cubic-bezier(0.4,0,0.2,1);
+}
+
+.dark {
+  --glass-bg: var(--glass-bg-dark);
+  --glass-border: var(--glass-border-dark);
+  --glass-shadow: var(--glass-shadow-dark);
+}
