@@ -1,0 +1,66 @@
+name: Phase Commit Enforcement
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+jobs:
+  enforce-phase-checkpoints:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate phase checkpoint commit policy
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          phase_regex='^chore\(phase\): .+ checkpoint( \([0-9]+ todos complete\))?$'
+          range="${BASE_SHA}..${HEAD_SHA}"
+
+          mapfile -t subjects < <(git log --format=%s "$range")
+          if [ ${#subjects[@]} -eq 0 ]; then
+            echo "No commits found in PR range: $range"
+            exit 1
+          fi
+
+          invalid_checkpoint_subjects=()
+          valid_checkpoint_count=0
+
+          for subject in "${subjects[@]}"; do
+            if [[ "$subject" == *"checkpoint"* ]]; then
+              if [[ "$subject" =~ $phase_regex ]]; then
+                valid_checkpoint_count=$((valid_checkpoint_count + 1))
+              else
+                invalid_checkpoint_subjects+=("$subject")
+              fi
+            fi
+          done
+
+          if [ ${#invalid_checkpoint_subjects[@]} -gt 0 ]; then
+            echo "Found checkpoint commit messages that do not match required format:"
+            for bad in "${invalid_checkpoint_subjects[@]}"; do
+              echo "  - $bad"
+            done
+            echo "Expected format: chore(phase): <phase> checkpoint (<n> todos complete optional)"
+            exit 1
+          fi
+
+          checklist_changed=0
+          if git diff --name-only "$range" | grep -qE '^docs/execution-checklist\.md$'; then
+            checklist_changed=1
+          fi
+
+          if [ "$checklist_changed" -eq 1 ] && [ "$valid_checkpoint_count" -lt 1 ]; then
+            echo "docs/execution-checklist.md changed, but no valid phase checkpoint commit was found."
+            echo "Add a commit like: chore(phase): P2 complete checkpoint"
+            exit 1
+          fi
+
+          echo "Phase checkpoint policy passed."
