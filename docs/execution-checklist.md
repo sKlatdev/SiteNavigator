@@ -126,13 +126,13 @@ Goal: Make portable delivery deterministic and safe for release.
 - [x] F1. Ignore generated server build artifacts (`server/public`, `server/build`) to prevent accidental commits.
 - [x] F2. Add portable executable smoke test automation and root npm wiring.
 - [x] F3. Add root release gates for audit and packaged runtime verification.
-- [x] F4. Stage a hidden launcher for the portable distribution so packaged startup does not require a visible terminal window.
+- [x] F4. Build a single native Windows launcher executable so startup does not require a visible terminal window.
 
 Exit Criteria:
 
 - Portable smoke test passes via one command from repo root.
 - Release gate command (`npm run release:check`) is available and documented.
-- Portable distribution includes a hidden launcher (`dist/SiteNavigator.vbs`) so users do not need an open command prompt window.
+- Portable distribution is a single executable (`dist/sitenavigator-win.exe`) that does not open a visible command prompt window.
 
 Exit Criteria:
 
@@ -165,4 +165,4 @@ Exit Criteria:
 - Added inline rename/delete controls for individual saved views and pinned filters in workspace chips.
 - Added Playwright keyboard automation (`npm run qa:keyboard:e2e`) for command palette, search focus, focus traps, saved/pinned controls, and collaboration flow.
 - Completed maintainability refactor: extracted SiteNavigator constants and shared utilities from `App.jsx` into feature modules under `client/src/features/sitenavigator/`.
-- Completed P5 implementation: artifact ignore policy, portable smoke automation, release gate scripts, and hidden portable launcher staging are now in place.
+- Completed P5 implementation: artifact ignore policy, portable smoke automation, release gate scripts, and single-executable windowless startup packaging are now in place.

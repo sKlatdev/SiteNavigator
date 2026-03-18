@@ -49,5 +49,5 @@ What this validates:
 
 Launch verification for packaging changes:
 
-1. Portable users should start the app by double-clicking `dist/SiteNavigator.vbs` so the packaged server runs without a visible terminal window.
-2. If troubleshooting is required, the packaged executable can still be launched directly for diagnostic purposes.
+1. Portable users should start the app by double-clicking `dist/sitenavigator-win.exe`; the packaged executable is configured to run without a visible terminal window.
+2. If troubleshooting is required, validate the packaged app through `npm run smoke:portable` from the repository root.

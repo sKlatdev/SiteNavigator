@@ -15,8 +15,7 @@ SiteNavigator is distributed as a portable Windows executable. End users do not 
 
 ### Build Artifacts
 
-- `dist/sitenavigator-win.exe`: self-contained executable built with `pkg`.
-- `dist/SiteNavigator.vbs`: optional hidden launcher that starts the executable without showing a terminal window.
+- `dist/sitenavigator-win.exe`: single self-contained Windows executable that launches without a visible terminal window.
 
 ### Build and Verify
 
@@ -26,7 +25,7 @@ From repository root:
 npm run build:portable:verify
 ```
 
-This command builds the client and server, packages the executable, stages the launcher, and smoke-tests the packaged app.
+This command builds the client and server, assembles the final single-file Windows executable, and smoke-tests the packaged app.
 
 ### Dependency Audit for Portable Runtime
 

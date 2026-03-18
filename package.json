@@ -9,7 +9,7 @@
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "build": "npm run build --prefix client && npm run build --prefix server",
     "start": "npm run start --prefix server",
-    "build:portable": "npm run build && npm run package:portable --prefix server && powershell -ExecutionPolicy Bypass -File ./scripts/stage-portable-launcher.ps1",
+    "build:portable": "npm run build && npm run package:portable:core --prefix server && powershell -ExecutionPolicy Bypass -File ./scripts/build-single-exe-launcher.ps1",
     "smoke:portable": "powershell -ExecutionPolicy Bypass -File ./scripts/smoke-portable.ps1",
     "build:portable:verify": "npm run build:portable && npm run smoke:portable",
     "audit:portable:deps": "node ./scripts/audit-portable-runtime.mjs",
