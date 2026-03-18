@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -31,8 +32,15 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173,ht
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const defaultDataDir = path.resolve(__dirname, "..", "data");
-const dataDir = path.resolve(process.env.SITENAVIGATOR_DATA_DIR || defaultDataDir);
+const packagedDataDir = process.pkg ? path.join(path.dirname(process.execPath), "data") : null;
+const dataDir = path.resolve(process.env.SITENAVIGATOR_DATA_DIR || packagedDataDir || defaultDataDir);
 const dbPath = path.join(dataDir, "index.json");
+const publicDir = path.resolve(__dirname, "..", "public");
+const publicIndexPath = path.join(publicDir, "index.html");
+const hasBuiltClient = fs.existsSync(publicIndexPath);
+const shouldOpenBrowser =
+  process.env.SITENAVIGATOR_OPEN_BROWSER === "true" ||
+  (typeof process.pkg !== "undefined" && process.env.SITENAVIGATOR_OPEN_BROWSER !== "false");
 
 app.use(
   cors({
@@ -126,8 +134,8 @@ function deriveTags(row, vendor) {
 
   try {
     const urlObj = new URL(String(row?.url || ""));
-    const path = urlObj.pathname.toLowerCase();
-    if (vendor === "Okta" && (path === "/wf" || path.startsWith("/wf/"))) {
+    const pathValue = urlObj.pathname.toLowerCase();
+    if (vendor === "Okta" && (pathValue === "/wf" || pathValue.startsWith("/wf/"))) {
       tags.add("Workflow");
     }
   } catch {
@@ -165,6 +173,23 @@ function formatPathInfo(absPath) {
     sizeBytes,
     sizeMB: Number((sizeBytes / (1024 * 1024)).toFixed(2)),
   };
+}
+
+function openBrowser(url) {
+  if (process.platform === "win32") {
+    const child = spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" });
+    child.unref();
+    return;
+  }
+
+  if (process.platform === "darwin") {
+    const child = spawn("open", [url], { detached: true, stdio: "ignore" });
+    child.unref();
+    return;
+  }
+
+  const child = spawn("xdg-open", [url], { detached: true, stdio: "ignore" });
+  child.unref();
 }
 
 function mergeStores(current, payload) {
@@ -416,30 +441,6 @@ app.post("/api/index/import-from-path", (req, res) => {
   }
 });
 
-function startServerWithRetry(startPort, retriesRemaining) {
-  const server = app.listen(startPort, () => {
-    console.log(`SiteNavigator server running at http://localhost:${startPort}`);
-  });
-
-  server.on("error", (err) => {
-    if (err?.code === "EADDRINUSE" && retriesRemaining > 1) {
-      const nextPort = startPort + 1;
-      console.warn(`[startup] Port ${startPort} is already in use. Retrying on ${nextPort}...`);
-      startServerWithRetry(nextPort, retriesRemaining - 1);
-      return;
-    }
-
-    if (err?.code === "EADDRINUSE") {
-      console.error(
-        `[startup] Failed to bind any port starting at ${PORT}. Set PORT or free the port and retry.`
-      );
-    } else {
-      console.error(`[startup] Server failed to start: ${err?.message || "Unknown error"}`);
-    }
-    process.exit(1);
-  });
-}
-
 app.get("/api/index/path-info", (req, res) => {
   if (!ENABLE_INDEX_PATH_IO || (IS_PROD && !isLocalRequest(req))) {
     return res.status(403).json({ ok: false, message: "Index path operations disabled" });
@@ -526,5 +527,48 @@ app.post("/api/index/load-from-path", (req, res) => {
     return res.status(500).json({ ok: false, message: e?.message || "Failed to load index" });
   }
 });
+
+if (hasBuiltClient) {
+  app.use(express.static(publicDir));
+
+  app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+    res.sendFile(publicIndexPath);
+  });
+}
+
+function startServerWithRetry(startPort, retriesRemaining) {
+  const server = app.listen(startPort, () => {
+    console.log(`SiteNavigator server running at http://localhost:${startPort}`);
+    if (hasBuiltClient) {
+      console.log(`Serving SiteNavigator web UI from ${publicDir}`);
+    }
+
+    if (shouldOpenBrowser) {
+      try {
+        openBrowser(`http://localhost:${startPort}`);
+      } catch (error) {
+        console.warn(`[startup] Failed to open browser: ${error?.message || "Unknown error"}`);
+      }
+    }
+  });
+
+  server.on("error", (err) => {
+    if (err?.code === "EADDRINUSE" && retriesRemaining > 1) {
+      const nextPort = startPort + 1;
+      console.warn(`[startup] Port ${startPort} is already in use. Retrying on ${nextPort}...`);
+      startServerWithRetry(nextPort, retriesRemaining - 1);
+      return;
+    }
+
+    if (err?.code === "EADDRINUSE") {
+      console.error(
+        `[startup] Failed to bind any port starting at ${PORT}. Set PORT or free the port and retry.`
+      );
+    } else {
+      console.error(`[startup] Server failed to start: ${err?.message || "Unknown error"}`);
+    }
+    process.exit(1);
+  });
+}
 
 startServerWithRetry(PORT, PORT_RETRY_COUNT);
