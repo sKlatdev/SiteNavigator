@@ -8,3 +8,32 @@
 - Stable dependencies only on the default branch (no beta prereleases)
 
 See the implementation checklist in `docs/execution-checklist.md`.
+
+## Portable Packaging
+
+SiteNavigator is distributed as a portable Windows executable. End users do not need to install Node.js, npm, or any app dependencies.
+
+### Build Artifacts
+
+- `dist/sitenavigator-win.exe`: self-contained executable built with `pkg`.
+- `dist/SiteNavigator.vbs`: optional hidden launcher that starts the executable without showing a terminal window.
+
+### Build and Verify
+
+From repository root:
+
+```powershell
+npm run build:portable:verify
+```
+
+This command builds the client and server, packages the executable, stages the launcher, and smoke-tests the packaged app.
+
+### Dependency Audit for Portable Runtime
+
+Run this from repository root:
+
+```powershell
+npm run audit:portable:deps
+```
+
+This audit verifies runtime dependency trees for `client` and `server`, and flags dependency metadata that can imply non-self-contained runtime behavior (such as install scripts, native build markers, or external binary metadata).

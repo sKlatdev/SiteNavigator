@@ -12,9 +12,9 @@
     "build:portable": "npm run build && npm run package:portable --prefix server && powershell -ExecutionPolicy Bypass -File ./scripts/stage-portable-launcher.ps1",
     "smoke:portable": "powershell -ExecutionPolicy Bypass -File ./scripts/smoke-portable.ps1",
     "build:portable:verify": "npm run build:portable && npm run smoke:portable",
-    "build:installer": "powershell -ExecutionPolicy Bypass -File ./scripts/build-installer.ps1",
+    "audit:portable:deps": "node ./scripts/audit-portable-runtime.mjs",
     "audit:all": "npm audit --audit-level=high && npm audit --prefix client --audit-level=high && npm audit --prefix server --audit-level=high",
-    "release:check": "npm run audit:all && npm run build:portable:verify"
+    "release:check": "npm run audit:all && npm run audit:portable:deps && npm run build:portable:verify"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

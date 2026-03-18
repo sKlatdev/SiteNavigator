@@ -13,7 +13,7 @@
       "dev:local": "node src/server.js --port=8788",
       "build": "node scripts/prepare-client.mjs && node scripts/bundle-server.mjs",
       "start": "node src/server.js",
-      "package:portable": "npx @yao-pkg/pkg . --output ../dist/sitenavigator-win.exe",
+      "package:portable": "npx @yao-pkg/pkg . --compress GZip --output ../dist/sitenavigator-win.exe",
       "test": "node --test",
       "test:coverage": "c8 --reporter=text-summary --reporter=lcov --include=src/recency.js node --test",
       "test:coverage:check": "c8 --check-coverage --lines 90 --functions 90 --branches 85 --statements 90 --include=src/recency.js node --test",
