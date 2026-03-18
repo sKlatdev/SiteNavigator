@@ -1,3 +1,32 @@
+import { parseSearchQuery } from "./searchRanking.js";
+
+function itemSearchText(item) {
+  return [item.title, item.summary, item.pathSummary, item.url, item.category, item.vendor]
+    .join(" ")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchesSearchFacetTerm(item, term) {
+  const text = itemSearchText(item);
+  if (!text) return false;
+
+  const parsed = parseSearchQuery(term);
+  const phraseTerms = parsed.phraseTerms || [];
+  const tokenTerms = parsed.tokenTerms || [];
+
+  if (phraseTerms.length && !phraseTerms.every((phrase) => text.includes(phrase))) {
+    return false;
+  }
+
+  if (!tokenTerms.length) {
+    return phraseTerms.length > 0;
+  }
+
+  return tokenTerms.some((token) => text.includes(token));
+}
+
 export function createPresetFacetTagDefinitions(searchFacetTerms, matchers) {
   const {
     isOktaItem = () => false,
@@ -55,11 +84,7 @@ export function createPresetFacetTagDefinitions(searchFacetTerms, matchers) {
   const searchTags = searchFacetTerms.map((term) => ({
     id: `search:${term}`,
     label: term,
-    predicate: (item) =>
-      [item.title, item.summary, item.pathSummary, item.url, item.category]
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
+    predicate: (item) => matchesSearchFacetTerm(item, term),
     isSearchTag: true,
   }));
 

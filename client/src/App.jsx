@@ -76,6 +76,11 @@ import {
   createPresetFacetTagDefinitions,
   withFacetTagCounts,
 } from "./features/sitenavigator/facets";
+import {
+  getSearchPriorityBadges,
+  isIncludesOnlyMatch,
+  sortItemsBySearchPriority,
+} from "./features/sitenavigator/searchRanking";
 
 /** =========================================================
  * Reusable UI
@@ -1370,13 +1375,15 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
           <span
             key={badge.id}
             className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${
-              badge.tone === "url"
+              badge.tone === "exact_phrase"
                 ? "border border-emerald-300/70 bg-emerald-100/80 text-emerald-900 dark:border-emerald-700/80 dark:bg-emerald-900/35 dark:text-emerald-200"
-                : badge.tone === "title"
+                : badge.tone === "exact_token"
                   ? "border border-blue-300/70 bg-blue-100/80 text-blue-900 dark:border-blue-700/80 dark:bg-blue-900/35 dark:text-blue-200"
-                  : badge.tone === "content"
+                  : badge.tone === "partial"
                     ? "border border-violet-300/70 bg-violet-100/80 text-violet-900 dark:border-violet-700/80 dark:bg-violet-900/35 dark:text-violet-200"
-                    : "border border-slate-300/70 bg-slate-100/80 text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200"
+                    : badge.tone === "includes"
+                      ? "border border-amber-300/70 bg-amber-100/80 text-amber-900 dark:border-amber-700/80 dark:bg-amber-900/35 dark:text-amber-200"
+                      : "border border-slate-300/70 bg-slate-100/80 text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200"
             }`}
           >
             {badge.label}
@@ -1422,16 +1429,57 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
 }
 
 function CatalogView({ title, items, query, onAdd, onTagClick, onCompare, onStageClone }) {
+  const [includesRevealCount, setIncludesRevealCount] = useState(0);
+  const includesBatchSize = 25;
+  const normalizedQuery = String(query || "").trim();
+
+  const visibleItems = useMemo(() => {
+    if (!normalizedQuery) return items;
+
+    const highValue = [];
+    const includesOnly = [];
+    items.forEach((item) => {
+      if (isIncludesOnlyMatch(item, normalizedQuery)) includesOnly.push(item);
+      else highValue.push(item);
+    });
+
+    const revealCount = Math.max(0, includesRevealCount);
+    const revealedIncludes = includesOnly.slice(0, revealCount);
+    return [...highValue, ...revealedIncludes];
+  }, [includesRevealCount, items, normalizedQuery]);
+
+  const includesOnlyCount = useMemo(() => {
+    if (!normalizedQuery) return 0;
+    return items.reduce((sum, item) => sum + (isIncludesOnlyMatch(item, normalizedQuery) ? 1 : 0), 0);
+  }, [items, normalizedQuery]);
+
+  const hiddenIncludesCount = Math.max(0, includesOnlyCount - includesRevealCount);
+  const hasRenderableItems = visibleItems.length > 0 || hiddenIncludesCount > 0;
+
   return (
     <div>
       <h2 className="type-display mb-4">{title}</h2>
-      {!items.length ? (
+      {!hasRenderableItems ? (
         <EmptyState title={`No ${title.toLowerCase()} matches`} text="Try another search term." />
       ) : (
-        <div className="catalog-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => (
-            <CatalogCard key={item.id} item={item} query={query} onAdd={onAdd} onTagClick={onTagClick} onCompare={onCompare} onStageClone={onStageClone} />
-          ))}
+        <div className="space-y-3">
+          {!!visibleItems.length && (
+            <div className="catalog-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleItems.map((item) => (
+                <CatalogCard key={item.id} item={item} query={query} onAdd={onAdd} onTagClick={onTagClick} onCompare={onCompare} onStageClone={onStageClone} />
+              ))}
+            </div>
+          )}
+          {hiddenIncludesCount > 0 && (
+            <div className="flex items-center justify-center">
+              <button
+                onClick={() => setIncludesRevealCount((prev) => prev + includesBatchSize)}
+                className="glass-control px-3 py-1.5 text-xs"
+              >
+                Show more includes matches ({hiddenIncludesCount} remaining)
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2653,91 +2701,7 @@ function toSearchFacetToken(value) {
   return String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9\s]/g, "")
-    .trim();
-}
-
-function countOccurrences(haystack, needle) {
-  const text = String(haystack || "").toLowerCase();
-  const term = String(needle || "").toLowerCase().trim();
-  if (!text || !term) return 0;
-  let count = 0;
-  let start = 0;
-  while (start < text.length) {
-    const idx = text.indexOf(term, start);
-    if (idx === -1) break;
-    count += 1;
-    start = idx + term.length;
-  }
-  return count;
-}
-
-function buildSearchTerms(query) {
-  const normalized = String(query || "").toLowerCase().trim();
-  if (!normalized) return [];
-  const tokens = normalized.split(/\s+/).filter((token) => token.length >= 2);
-  const terms = [normalized, ...tokens];
-  return [...new Set(terms)].filter(Boolean);
-}
-
-function rankItemForQuery(item, query) {
-  const terms = buildSearchTerms(query);
-  if (!terms.length) {
-    return { group: 3, titleCount: 0, urlCount: 0, totalCount: 0 };
-  }
-
-  const url = String(item?.url || "").toLowerCase();
-  const title = String(item?.title || "").toLowerCase();
-  const summary = String(item?.summary || "").toLowerCase();
-  const pathSummary = String(item?.pathSummary || "").toLowerCase();
-  const tags = Array.isArray(item?.tags) ? item.tags.join(" ").toLowerCase() : "";
-  const category = String(item?.category || "").toLowerCase();
-
-  const urlCount = terms.reduce((sum, term) => sum + countOccurrences(url, term), 0);
-  const titleCount = terms.reduce((sum, term) => sum + countOccurrences(title, term), 0);
-  const bodyCount = terms.reduce(
-    (sum, term) =>
-      sum +
-      countOccurrences(summary, term) +
-      countOccurrences(pathSummary, term) +
-      countOccurrences(tags, term) +
-      countOccurrences(category, term),
-    0
-  );
-
-  const totalCount = urlCount + titleCount + bodyCount;
-  const group = urlCount > 0 ? 0 : titleCount > 0 ? 1 : 2;
-  return { group, titleCount, urlCount, totalCount };
-}
-
-function sortItemsBySearchPriority(items, query) {
-  const normalized = String(query || "").trim();
-  if (!normalized) return items;
-
-  return items
-    .map((item, idx) => ({ item, idx, rank: rankItemForQuery(item, normalized) }))
-    .sort((a, b) => {
-      if (a.rank.group !== b.rank.group) return a.rank.group - b.rank.group;
-      if (a.rank.totalCount !== b.rank.totalCount) return b.rank.totalCount - a.rank.totalCount;
-      if (a.rank.urlCount !== b.rank.urlCount) return b.rank.urlCount - a.rank.urlCount;
-      if (a.rank.titleCount !== b.rank.titleCount) return b.rank.titleCount - a.rank.titleCount;
-      return a.idx - b.idx;
-    })
-    .map((entry) => entry.item);
-}
-
-function getSearchPriorityBadges(item, query) {
-  const rank = rankItemForQuery(item, query);
-  if (rank.group === 3) return [];
-
-  const badges = [];
-  if (rank.urlCount > 0) badges.push({ id: "url", label: "URL Match", tone: "url" });
-  else if (rank.titleCount > 0) badges.push({ id: "title", label: "Title Match", tone: "title" });
-  else badges.push({ id: "content", label: "Content Match", tone: "content" });
-
-  badges.push({ id: "hits", label: `${rank.totalCount} hits`, tone: "hits" });
-  return badges;
+    .replace(/\s+/g, " ");
 }
 
 

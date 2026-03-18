@@ -94,3 +94,29 @@ test("search facet tags are generated and match text content", () => {
     false
   );
 });
+
+test("search facet quoted phrases require strict adjacency", () => {
+  const tags = createPresetFacetTagDefinitions(['"cisco asa"'], {});
+  const searchTag = byId(tags, 'search:"cisco asa"');
+
+  assert.ok(searchTag, "quoted search tag should be present");
+  assert.equal(
+    searchTag.predicate({ title: "Cisco ASA Configuration Guide", summary: "", pathSummary: "", url: "", category: "docs" }),
+    true
+  );
+  assert.equal(
+    searchTag.predicate({ title: "Cisco Advanced Security Appliance", summary: "", pathSummary: "", url: "", category: "docs" }),
+    false
+  );
+});
+
+test("search facet supports short acronym tokens", () => {
+  const tags = createPresetFacetTagDefinitions(["mfa"], {});
+  const searchTag = byId(tags, "search:mfa");
+
+  assert.ok(searchTag, "acronym search tag should be present");
+  assert.equal(
+    searchTag.predicate({ title: "MFA Enrollment", summary: "", pathSummary: "", url: "", category: "docs" }),
+    true
+  );
+});
