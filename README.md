@@ -13,9 +13,12 @@ See the implementation checklist in `docs/execution-checklist.md`.
 
 SiteNavigator is distributed as a portable Windows executable. End users do not need to install Node.js, npm, or any app dependencies.
 
+`main` is the production branch. Every push to `main` runs the production release workflow, rebuilds and verifies the portable app, and updates the GitHub Latest Release.
+
 ### Build Artifacts
 
 - `dist/sitenavigator-win.exe`: single self-contained Windows executable that launches without a visible terminal window.
+- `dist/data/index.json`: base index data generated during portable smoke verification and published on GitHub as `sitenavigator-data.zip`.
 
 ### Build and Verify
 
@@ -26,6 +29,15 @@ npm run build:portable:verify
 ```
 
 This command builds the client and server, assembles the final single-file Windows executable, and smoke-tests the packaged app.
+
+### GitHub Production Release
+
+The production release workflow publishes these assets from `main` to the GitHub Latest Release:
+
+- `sitenavigator-win.exe`
+- `sitenavigator-data.zip`
+
+The zip contains the `data` folder with the verified base index generated during the portable smoke test.
 
 ### Dependency Audit for Portable Runtime
 

@@ -1,0 +1,79 @@
+name: Production Release
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-release
+  cancel-in-progress: true
+
+jobs:
+  publish-production-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install client dependencies
+        run: npm ci --prefix client
+
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Build and verify release artifacts
+        shell: pwsh
+        run: npm run release:check
+
+      - name: Archive base index data
+        shell: pwsh
+        run: Compress-Archive -Path dist/data -DestinationPath dist/sitenavigator-data.zip -Force
+
+      - name: Move production tag to current main
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f production
+          git push --force origin refs/tags/production
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: production
+          name: Production
+          make_latest: true
+          prerelease: false
+          generate_release_notes: true
+          append_body: true
+          body: |
+            Production release from `main`.
+
+            Assets:
+            - `sitenavigator-win.exe`: latest portable Windows executable
+            - `sitenavigator-data.zip`: base index data folder created during portable smoke verification
+          files: |
+            dist/sitenavigator-win.exe
+            dist/sitenavigator-data.zip
+          fail_on_unmatched_files: true
+          overwrite_files: true
