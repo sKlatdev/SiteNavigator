@@ -107,6 +107,91 @@ function buildItemSearchText(item) {
   };
 }
 
+function buildItemSearchFields(item) {
+  return [
+    { key: "title", label: "Title", text: String(item?.title || "") },
+    { key: "summary", label: "Summary", text: String(item?.summary || "") },
+    { key: "pathSummary", label: "Path", text: String(item?.pathSummary || "") },
+    { key: "url", label: "URL", text: String(item?.url || "") },
+    {
+      key: "tags",
+      label: "Tags",
+      text: Array.isArray(item?.tags) ? item.tags.filter(Boolean).join(" ") : "",
+    },
+  ].filter((field) => field.text.trim());
+}
+
+function collectSubstringMatchPositions(text, term) {
+  const source = String(text || "");
+  const queryTerm = String(term || "");
+  if (!source || !queryTerm) return [];
+
+  const sourceLower = source.toLowerCase();
+  const termLower = queryTerm.toLowerCase();
+  const positions = [];
+  let offset = 0;
+  while (offset < sourceLower.length) {
+    const idx = sourceLower.indexOf(termLower, offset);
+    if (idx < 0) break;
+    positions.push({ start: idx, end: idx + termLower.length });
+    offset = idx + termLower.length;
+  }
+  return positions;
+}
+
+function collectBoundaryMatchPositions(text, token) {
+  const source = String(text || "");
+  const value = String(token || "").toLowerCase();
+  if (!source || !value) return [];
+
+  const pattern = new RegExp(`(^|[^a-z0-9])(${escapeRegExp(value)})(?=$|[^a-z0-9])`, "gi");
+  const positions = [];
+  let match = pattern.exec(source.toLowerCase());
+  while (match) {
+    const leading = match[1] ? match[1].length : 0;
+    const start = match.index + leading;
+    positions.push({ start, end: start + value.length });
+    match = pattern.exec(source.toLowerCase());
+  }
+  return positions;
+}
+
+function buildContextSnippet(text, start, end, contextWindow = 36) {
+  const source = String(text || "");
+  const safeStart = Math.max(0, Math.min(source.length, start));
+  const safeEnd = Math.max(safeStart, Math.min(source.length, end));
+  const left = Math.max(0, safeStart - contextWindow);
+  const right = Math.min(source.length, safeEnd + contextWindow);
+  const prefix = left > 0 ? "..." : "";
+  const suffix = right < source.length ? "..." : "";
+  const snippet = `${prefix}${source.slice(left, right)}${suffix}`;
+  const snippetMatchStart = prefix.length + (safeStart - left);
+  const snippetMatchEnd = snippetMatchStart + (safeEnd - safeStart);
+  return {
+    snippet,
+    snippetMatchStart,
+    snippetMatchEnd,
+  };
+}
+
+function pushMatches(matches, dedupe, field, term, matchType, positions) {
+  positions.forEach(({ start, end }) => {
+    const key = `${field.key}:${matchType}:${term}:${start}:${end}`;
+    if (dedupe.has(key)) return;
+    dedupe.add(key);
+    const context = buildContextSnippet(field.text, start, end);
+    matches.push({
+      field: field.key,
+      fieldLabel: field.label,
+      matchType,
+      term,
+      start,
+      end,
+      ...context,
+    });
+  });
+}
+
 function countBoundaryMatches(text, token) {
   if (!text || !token) return 0;
   const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(token)}(?=$|[^a-z0-9])`, "gi");
@@ -215,6 +300,149 @@ export function getSearchPriorityBadges(item, query) {
 
   badges.push({ id: "hits", label: `${rank.totalHits} hits`, tone: "hits" });
   return badges;
+}
+
+export function getSearchMatchExplanation(item, query, mode = "hits") {
+  const parsed = typeof query === "string" ? parseSearchQuery(query) : query;
+  const rank = rankItemForQuery(item, parsed);
+  if (!rank.hasMatch) return null;
+
+  const fields = buildItemSearchFields(item);
+  const highPriorityKeys = new Set(["title", "tags", "url"]);
+  const phraseTerms = Array.isArray(parsed?.phraseTerms) ? parsed.phraseTerms : [];
+  const tokenTerms = Array.isArray(parsed?.tokenTerms) ? parsed.tokenTerms : [];
+
+  const matches = [];
+  const dedupe = new Set();
+
+  if (mode === "partial") {
+    phraseTerms.forEach((phrase) => {
+      fields
+        .filter((field) => !highPriorityKeys.has(field.key))
+        .forEach((field) => {
+          pushMatches(
+            matches,
+            dedupe,
+            field,
+            phrase,
+            "partial_phrase",
+            collectSubstringMatchPositions(field.text, phrase)
+          );
+        });
+    });
+
+    tokenTerms.forEach((token) => {
+      fields
+        .filter((field) => highPriorityKeys.has(field.key))
+        .forEach((field) => {
+          pushMatches(
+            matches,
+            dedupe,
+            field,
+            token,
+            "partial_token",
+            collectBoundaryMatchPositions(field.text, token)
+          );
+        });
+    });
+  } else {
+    phraseTerms.forEach((phrase) => {
+      fields.forEach((field) => {
+        pushMatches(
+          matches,
+          dedupe,
+          field,
+          phrase,
+          "exact_phrase",
+          collectSubstringMatchPositions(field.text, phrase)
+        );
+      });
+    });
+
+    tokenTerms.forEach((token) => {
+      fields
+        .filter((field) => highPriorityKeys.has(field.key))
+        .forEach((field) => {
+          pushMatches(
+            matches,
+            dedupe,
+            field,
+            token,
+            "exact_token",
+            collectBoundaryMatchPositions(field.text, token)
+          );
+        });
+
+      fields.forEach((field) => {
+        pushMatches(
+          matches,
+          dedupe,
+          field,
+          token,
+          "includes",
+          collectSubstringMatchPositions(field.text, token)
+        );
+      });
+    });
+  }
+
+  const grouped = matches.reduce((acc, match) => {
+    const key = match.field;
+    if (!acc[key]) {
+      acc[key] = {
+        field: match.field,
+        fieldLabel: match.fieldLabel,
+        count: 0,
+      };
+    }
+    acc[key].count += 1;
+    return acc;
+  }, {});
+
+  const exactMatchedTerms = tokenTerms.filter((token) =>
+    fields
+      .filter((field) => highPriorityKeys.has(field.key))
+      .some((field) => collectBoundaryMatchPositions(field.text, token).length > 0)
+  );
+  const includesOnlyTerms = tokenTerms.filter((token) =>
+    !exactMatchedTerms.includes(token) &&
+    fields.some((field) => collectSubstringMatchPositions(field.text, token).length > 0)
+  );
+  const missingTerms = tokenTerms.filter(
+    (token) => !exactMatchedTerms.includes(token) && !includesOnlyTerms.includes(token)
+  );
+
+  let baseHeadline = `${rank.totalHits} total hits contributed to ranking.`;
+  if (tokenTerms.length) {
+    const exactCount = exactMatchedTerms.length;
+    const includeCount = includesOnlyTerms.length;
+    const missingCount = missingTerms.length;
+    baseHeadline = `Matched ${exactCount} of ${tokenTerms.length} terms exactly.`;
+    if (includeCount > 0) {
+      baseHeadline += ` ${includeCount} term${includeCount === 1 ? "" : "s"} matched as includes-only.`;
+    }
+    if (missingCount > 0) {
+      baseHeadline += ` ${missingCount} term${missingCount === 1 ? "" : "s"} did not match.`;
+    }
+  }
+
+  const phraseHeadline = phraseTerms.length
+    ? ` Phrase hits: ${rank.exactPhraseHits}.`
+    : "";
+  const hitsHeadline = `${baseHeadline}${phraseHeadline}`;
+  const partialHeadline = tokenTerms.length
+    ? baseHeadline
+    : "Partial match was triggered by phrase matches outside high-priority fields.";
+
+  const sortedMatches = matches.sort((a, b) => a.fieldLabel.localeCompare(b.fieldLabel) || a.start - b.start);
+
+  return {
+    mode: mode === "partial" ? "partial" : "hits",
+    rank,
+    headline: mode === "partial" ? partialHeadline : hitsHeadline,
+    groups: Object.values(grouped).sort((a, b) => b.count - a.count),
+    matches: sortedMatches.slice(0, 40),
+  };
 }
 
 export function isIncludesOnlyMatch(item, query) {

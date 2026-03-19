@@ -77,6 +77,7 @@ import {
   withFacetTagCounts,
 } from "./features/sitenavigator/facets";
 import {
+  getSearchMatchExplanation,
   getSearchPriorityBadges,
   isIncludesOnlyMatch,
   sortItemsBySearchPriority,
@@ -209,6 +210,87 @@ function BadgeRecentlyUpdated({ recentlyUpdated, recentReason }) {
     <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
       {label}
     </span>
+  );
+}
+
+function searchBadgeToneClass(tone) {
+  if (tone === "exact_phrase") {
+    return "border border-emerald-300/70 bg-emerald-100/80 text-emerald-900 dark:border-emerald-700/80 dark:bg-emerald-900/35 dark:text-emerald-200";
+  }
+  if (tone === "exact_token") {
+    return "border border-blue-300/70 bg-blue-100/80 text-blue-900 dark:border-blue-700/80 dark:bg-blue-900/35 dark:text-blue-200";
+  }
+  if (tone === "partial") {
+    return "border border-violet-300/70 bg-violet-100/80 text-violet-900 dark:border-violet-700/80 dark:bg-violet-900/35 dark:text-violet-200";
+  }
+  if (tone === "includes") {
+    return "border border-amber-300/70 bg-amber-100/80 text-amber-900 dark:border-amber-700/80 dark:bg-amber-900/35 dark:text-amber-200";
+  }
+  return "border border-slate-300/70 bg-slate-100/80 text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200";
+}
+
+function SearchBadgePopover({ id, title, explanation, onClose }) {
+  if (!explanation) return null;
+
+  return (
+    <div
+      id={id}
+      role="dialog"
+      aria-modal="false"
+      aria-label={title}
+      className="absolute left-0 top-full z-20 mt-2 w-80 max-w-[calc(100vw-3rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-950"
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">{title}</p>
+          <p className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-300">{explanation.headline}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded border border-slate-300 p-1 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
+          aria-label="Close match context"
+        >
+          <X size={12} />
+        </button>
+      </div>
+
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        {explanation.groups.map((group) => (
+          <span
+            key={group.field}
+            className="rounded-full border border-slate-300/80 bg-slate-100/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+          >
+            {group.fieldLabel}: {group.count}
+          </span>
+        ))}
+      </div>
+
+      {!explanation.matches.length ? (
+        <p className="text-[11px] text-slate-600 dark:text-slate-300">No additional context was captured for this badge.</p>
+      ) : (
+        <ul className="max-h-64 space-y-1.5 overflow-auto pr-1">
+          {explanation.matches.map((match, idx) => {
+            const before = match.snippet.slice(0, match.snippetMatchStart);
+            const hit = match.snippet.slice(match.snippetMatchStart, match.snippetMatchEnd);
+            const after = match.snippet.slice(match.snippetMatchEnd);
+            return (
+              <li
+                key={`${match.field}-${match.term}-${match.start}-${idx}`}
+                className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200"
+              >
+                <p className="mb-1 font-semibold text-slate-900 dark:text-slate-100">{match.fieldLabel}</p>
+                <p className="font-mono leading-snug">
+                  <span>{before}</span>
+                  <mark className="rounded bg-yellow-200 px-0.5 text-slate-900 dark:bg-yellow-500/40 dark:text-yellow-100">{hit}</mark>
+                  <span>{after}</span>
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -1334,6 +1416,55 @@ function Dashboard({ summary, backupStale, onQuickExport, onQuickFilterTag, onOp
 function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }) {
   const searchBadges = getSearchPriorityBadges(item, query);
   const isCompetitor = isCompetitorResultItem(item);
+  const [openBadgeId, setOpenBadgeId] = useState(null);
+  const [openBadgeExplanation, setOpenBadgeExplanation] = useState(null);
+  const popoverRef = useRef(null);
+  const triggerRef = useRef(null);
+
+  const closeBadgeContext = useCallback(() => {
+    setOpenBadgeId(null);
+    setOpenBadgeExplanation(null);
+    if (triggerRef.current && typeof triggerRef.current.focus === "function") {
+      triggerRef.current.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!openBadgeId) return undefined;
+
+    const onPointerDown = (event) => {
+      const target = event.target;
+      if (popoverRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpenBadgeId(null);
+      setOpenBadgeExplanation(null);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeBadgeContext();
+    };
+
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [closeBadgeContext, openBadgeId]);
+
+  const openBadgeContext = useCallback(
+    (badge, event) => {
+      const mode = badge.id === "partial" ? "partial" : "hits";
+      const explanation = getSearchMatchExplanation(item, query, mode);
+      if (!explanation) return;
+      triggerRef.current = event.currentTarget;
+      setOpenBadgeId(badge.id);
+      setOpenBadgeExplanation(explanation);
+    },
+    [item, query]
+  );
+
   return (
     <div className="glass-surface-static p-4">
       <div className="flex items-start justify-between gap-2">
@@ -1371,24 +1502,46 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
             {item.vendor}
           </button>
         ) : null}
-        {searchBadges.map((badge) => (
-          <span
-            key={badge.id}
-            className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${
-              badge.tone === "exact_phrase"
-                ? "border border-emerald-300/70 bg-emerald-100/80 text-emerald-900 dark:border-emerald-700/80 dark:bg-emerald-900/35 dark:text-emerald-200"
-                : badge.tone === "exact_token"
-                  ? "border border-blue-300/70 bg-blue-100/80 text-blue-900 dark:border-blue-700/80 dark:bg-blue-900/35 dark:text-blue-200"
-                  : badge.tone === "partial"
-                    ? "border border-violet-300/70 bg-violet-100/80 text-violet-900 dark:border-violet-700/80 dark:bg-violet-900/35 dark:text-violet-200"
-                    : badge.tone === "includes"
-                      ? "border border-amber-300/70 bg-amber-100/80 text-amber-900 dark:border-amber-700/80 dark:bg-amber-900/35 dark:text-amber-200"
-                      : "border border-slate-300/70 bg-slate-100/80 text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200"
-            }`}
-          >
-            {badge.label}
-          </span>
-        ))}
+        {searchBadges.map((badge) => {
+          const interactive = badge.id === "hits" || badge.id === "partial";
+          const badgeClass = `rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${searchBadgeToneClass(badge.tone)}`;
+          if (!interactive) {
+            return (
+              <span key={badge.id} className={badgeClass}>
+                {badge.label}
+              </span>
+            );
+          }
+
+          const isOpen = openBadgeId === badge.id;
+          const popoverId = `badge-context-${item.id}-${badge.id}`;
+          const popoverTitle = badge.id === "partial" ? "Partial match context" : "Hit context";
+
+          return (
+            <div key={badge.id} className="relative inline-flex">
+              <button
+                type="button"
+                onClick={(event) => openBadgeContext(badge, event)}
+                className={`${badgeClass} transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-cyan-500`}
+                aria-expanded={isOpen}
+                aria-controls={popoverId}
+                aria-label={`${badge.label}. Show match context.`}
+              >
+                {badge.label}
+              </button>
+              {isOpen && (
+                <div ref={popoverRef}>
+                  <SearchBadgePopover
+                    id={popoverId}
+                    title={popoverTitle}
+                    explanation={openBadgeExplanation}
+                    onClose={closeBadgeContext}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
         {item.pathSummary && <span>· {item.pathSummary}</span>}
       </div>
       <p className="text-glass-secondary mt-3 text-sm">{item.summary}</p>

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  getSearchMatchExplanation,
   parseSearchQuery,
   rankItemForQuery,
   sortItemsBySearchPriority,
@@ -76,4 +77,43 @@ test("sortItemsBySearchPriority drops non-matches when query is present", () => 
 
   const sorted = sortItemsBySearchPriority(items, "duo");
   assert.deepEqual(sorted.map((item) => item.id), ["a"]);
+});
+
+test("getSearchMatchExplanation returns context windows for hits", () => {
+  const item = {
+    id: "a",
+    title: "Duo Admin MFA setup",
+    tags: ["mfa", "duo"],
+    url: "https://duo.com/docs/mfa",
+    summary: "Step by step guide for Duo admins configuring MFA",
+    pathSummary: "duo.com/docs/mfa",
+    category: "docs",
+  };
+
+  const explanation = getSearchMatchExplanation(item, "duo mfa", "hits");
+  assert.ok(explanation);
+  assert.equal(explanation.mode, "hits");
+  assert.ok(explanation.headline.includes("Matched 2 of 2 terms exactly."));
+  assert.ok(explanation.matches.length > 0);
+  assert.ok(explanation.groups.some((group) => group.field === "title"));
+  assert.ok(explanation.matches.some((match) => match.snippet.includes("Duo")));
+});
+
+test("getSearchMatchExplanation partial mode limits evidence to partial contributors", () => {
+  const item = {
+    id: "b",
+    title: "Cisco adaptive security appliance",
+    tags: ["firewall"],
+    url: "https://example.com/cisco-adaptive-security",
+    summary: "Security appliance overview",
+    pathSummary: "example.com/docs/appliance",
+    category: "docs",
+  };
+
+  const explanation = getSearchMatchExplanation(item, "Cisco ASA", "partial");
+  assert.ok(explanation);
+  assert.equal(explanation.mode, "partial");
+  assert.ok(explanation.headline.includes("Matched 1 of 2 terms exactly."));
+  assert.ok(explanation.headline.includes("1 term did not match."));
+  assert.ok(explanation.matches.every((match) => match.matchType.startsWith("partial_")));
 });
