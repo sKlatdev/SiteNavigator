@@ -45,9 +45,9 @@ jobs:
         shell: pwsh
         run: npm run release:check
 
-      - name: Archive base index data
+      - name: Archive dist payload
         shell: pwsh
-        run: Compress-Archive -Path dist/data -DestinationPath dist/sitenavigator-data.zip -Force
+        run: Compress-Archive -Path dist -DestinationPath dist/sitenavigator-dist.zip -Force
 
       - name: Move production tag to current main
         shell: bash
@@ -71,9 +71,9 @@ jobs:
 
             Assets:
             - `sitenavigator-win.exe`: latest portable Windows executable
-            - `sitenavigator-data.zip`: base index data folder created during portable smoke verification
+            - `sitenavigator-dist.zip`: packaged `dist` directory containing the executable and `data/index.json`
           files: |
             dist/sitenavigator-win.exe
-            dist/sitenavigator-data.zip
+            dist/sitenavigator-dist.zip
           fail_on_unmatched_files: true
           overwrite_files: true

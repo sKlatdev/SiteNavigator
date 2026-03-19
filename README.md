@@ -15,10 +15,18 @@ SiteNavigator is distributed as a portable Windows executable. End users do not 
 
 `main` is the production branch. Every push to `main` runs the production release workflow, rebuilds and verifies the portable app, and updates the GitHub Latest Release.
 
+## Branching Policy
+
+- `Dev` is the working branch for all new development.
+- All new work, routine commits, and non-production pushes should go to `Dev` unless a production promotion is explicitly requested.
+- `main` is reserved for production promotion only.
+- Promote changes by merging `Dev` into `main` as the final step.
+- Every push to `main` automatically publishes the updated GitHub Latest Release.
+
 ### Build Artifacts
 
 - `dist/sitenavigator-win.exe`: single self-contained Windows executable that launches without a visible terminal window.
-- `dist/data/index.json`: base index data generated during portable smoke verification and published on GitHub as `sitenavigator-data.zip`.
+- `dist/data/index.json`: base index data generated during portable smoke verification.
 
 ### Build and Verify
 
@@ -35,9 +43,12 @@ This command builds the client and server, assembles the final single-file Windo
 The production release workflow publishes these assets from `main` to the GitHub Latest Release:
 
 - `sitenavigator-win.exe`
-- `sitenavigator-data.zip`
+- `sitenavigator-dist.zip`
 
-The zip contains the `data` folder with the verified base index generated during the portable smoke test.
+The zip contains the full `dist` directory, including:
+
+- `dist/sitenavigator-win.exe`
+- `dist/data/index.json`
 
 ### Dependency Audit for Portable Runtime
 
