@@ -1,4 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   LayoutDashboard,
   Puzzle,
@@ -226,11 +227,18 @@ function searchBadgeToneClass(tone) {
   if (tone === "includes") {
     return "border border-amber-300/70 bg-amber-100/80 text-amber-900 dark:border-amber-700/80 dark:bg-amber-900/35 dark:text-amber-200";
   }
+  if (tone === "full_match") {
+    return "border border-teal-300/70 bg-teal-100/80 text-teal-900 dark:border-teal-700/80 dark:bg-teal-900/35 dark:text-teal-200";
+  }
   return "border border-slate-300/70 bg-slate-100/80 text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200";
 }
 
-function SearchBadgePopover({ id, title, explanation, onClose }) {
+function SearchBadgePopover({ id, title, explanation, onClose, anchorRect }) {
   if (!explanation) return null;
+
+  const top = anchorRect ? anchorRect.bottom + 8 : 0;
+  const rawLeft = anchorRect ? anchorRect.left : 0;
+  const left = Math.min(rawLeft, Math.max(0, window.innerWidth - 320 - 12));
 
   return (
     <div
@@ -238,7 +246,8 @@ function SearchBadgePopover({ id, title, explanation, onClose }) {
       role="dialog"
       aria-modal="false"
       aria-label={title}
-      className="absolute left-0 top-full z-20 mt-2 w-80 max-w-[calc(100vw-3rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-950"
+      style={{ position: "fixed", top, left, zIndex: 9999, width: 320 }}
+      className="rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-950"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
@@ -1418,12 +1427,14 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
   const isCompetitor = isCompetitorResultItem(item);
   const [openBadgeId, setOpenBadgeId] = useState(null);
   const [openBadgeExplanation, setOpenBadgeExplanation] = useState(null);
+  const [badgeAnchorRect, setBadgeAnchorRect] = useState(null);
   const popoverRef = useRef(null);
   const triggerRef = useRef(null);
 
   const closeBadgeContext = useCallback(() => {
     setOpenBadgeId(null);
     setOpenBadgeExplanation(null);
+    setBadgeAnchorRect(null);
     if (triggerRef.current && typeof triggerRef.current.focus === "function") {
       triggerRef.current.focus();
     }
@@ -1437,6 +1448,7 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
       if (popoverRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
       setOpenBadgeId(null);
       setOpenBadgeExplanation(null);
+      setBadgeAnchorRect(null);
     };
 
     const onKeyDown = (event) => {
@@ -1445,11 +1457,19 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
       closeBadgeContext();
     };
 
+    const onScroll = () => {
+      setOpenBadgeId(null);
+      setOpenBadgeExplanation(null);
+      setBadgeAnchorRect(null);
+    };
+
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
     return () => {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScroll, { capture: true });
     };
   }, [closeBadgeContext, openBadgeId]);
 
@@ -1459,6 +1479,7 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
       const explanation = getSearchMatchExplanation(item, query, mode);
       if (!explanation) return;
       triggerRef.current = event.currentTarget;
+      setBadgeAnchorRect(event.currentTarget.getBoundingClientRect());
       setOpenBadgeId(badge.id);
       setOpenBadgeExplanation(explanation);
     },
@@ -1503,7 +1524,7 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
           </button>
         ) : null}
         {searchBadges.map((badge) => {
-          const interactive = badge.id === "hits" || badge.id === "partial";
+          const interactive = badge.id === "hits" || badge.id === "partial" || badge.id === "full_match";
           const badgeClass = `rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${searchBadgeToneClass(badge.tone)}`;
           if (!interactive) {
             return (
@@ -1515,7 +1536,10 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
 
           const isOpen = openBadgeId === badge.id;
           const popoverId = `badge-context-${item.id}-${badge.id}`;
-          const popoverTitle = badge.id === "partial" ? "Partial match context" : "Hit context";
+          const popoverTitle =
+            badge.id === "partial" ? "Partial match context" :
+            badge.id === "full_match" ? "Full match context (body)" :
+            "Hit context";
 
           return (
             <div key={badge.id} className="relative inline-flex">
@@ -1529,15 +1553,17 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
               >
                 {badge.label}
               </button>
-              {isOpen && (
+              {isOpen && badgeAnchorRect && createPortal(
                 <div ref={popoverRef}>
                   <SearchBadgePopover
                     id={popoverId}
                     title={popoverTitle}
                     explanation={openBadgeExplanation}
                     onClose={closeBadgeContext}
+                    anchorRect={badgeAnchorRect}
                   />
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           );

@@ -205,7 +205,7 @@ export function rankItemForQuery(item, query) {
   const tokenTerms = Array.isArray(parsed?.tokenTerms) ? parsed.tokenTerms : [];
   if (!phraseTerms.length && !tokenTerms.length) {
     return {
-      tier: 4,
+      tier: 5,
       score: 0,
       includesOnly: false,
       totalHits: 0,
@@ -237,35 +237,58 @@ export function rankItemForQuery(item, query) {
   const includesHits = tokenTerms.reduce((sum, token) => sum + countOccurrences(text.fullText, token), 0);
   const hasAnyIncludes = includesHits > 0 || exactPhraseBodyHits > 0;
 
+  const bodyBoundaryMatchesByToken = tokenTerms.map((token) => countBoundaryMatches(text.bodyPriority, token));
+  const exactTokenCoverageAny = tokenTerms.length
+    ? tokenTerms.every((_, i) => boundaryMatchesByToken[i] > 0 || bodyBoundaryMatchesByToken[i] > 0)
+    : false;
+
   const tier = exactPhraseHighHits > 0
     ? 0
     : exactTokenCoverage
       ? 1
-      : partialTokenHits > 0 || exactPhraseBodyHits > 0
+      : exactTokenCoverageAny
         ? 2
-        : hasAnyIncludes
+        : partialTokenHits > 0 || exactPhraseBodyHits > 0
           ? 3
-          : 4;
+          : hasAnyIncludes
+            ? 4
+            : 5;
 
-  const hasMatch = tier < 4;
-  const includesOnly = tier === 3;
-  const totalHits = exactPhraseHighHits + exactPhraseBodyHits + exactTokenHits + includesHits;
+  const hasMatch = tier < 5;
+  const includesOnly = tier === 4;
+
+  // Scoring: title hits capped at 1 per term; body weighted higher; phrase weighted highest
+  const titlePhraseCapped = phraseTerms.reduce(
+    (sum, phrase) => sum + Math.min(1, countOccurrences(text.title, phrase)),
+    0
+  );
+  const titleTokenCapped = tokenTerms.reduce(
+    (sum, token) => sum + Math.min(1, countBoundaryMatches(text.title, token)),
+    0
+  );
+  const bodyTokenHits = tokenTerms.reduce(
+    (sum, token) => sum + countBoundaryMatches(text.bodyPriority, token),
+    0
+  );
+
+  const totalHits = titlePhraseCapped + exactPhraseBodyHits + titleTokenCapped + bodyTokenHits + includesHits;
 
   const score =
-    exactPhraseHighHits * 1000 +
-    exactPhraseBodyHits * 400 +
+    exactPhraseBodyHits * 1500 +
+    titlePhraseCapped * 600 +
     (exactTokenCoverage ? 300 : 0) +
-    exactTokenHits * 60 +
+    bodyTokenHits * 80 +
+    titleTokenCapped * 30 +
     partialTokenHits * 20 +
-    includesHits;
+    includesHits * 2;
 
   return {
     tier,
     score,
     includesOnly,
     totalHits,
-    exactPhraseHits: exactPhraseHighHits + exactPhraseBodyHits,
-    exactTokenHits,
+    exactPhraseHits: titlePhraseCapped + exactPhraseBodyHits,
+    exactTokenHits: titleTokenCapped + bodyTokenHits,
     partialTokenHits,
     hasMatch,
   };
@@ -295,7 +318,8 @@ export function getSearchPriorityBadges(item, query) {
   const badges = [];
   if (rank.tier === 0) badges.push({ id: "exact_phrase", label: "Exact Phrase", tone: "exact_phrase" });
   else if (rank.tier === 1) badges.push({ id: "exact_token", label: "Exact Token", tone: "exact_token" });
-  else if (rank.tier === 2) badges.push({ id: "partial", label: "Partial Match", tone: "partial" });
+  else if (rank.tier === 2) badges.push({ id: "full_match", label: "Full Match", tone: "full_match" });
+  else if (rank.tier === 3) badges.push({ id: "partial", label: "Partial Match", tone: "partial" });
   else badges.push({ id: "includes", label: "Includes", tone: "includes" });
 
   badges.push({ id: "hits", label: `${rank.totalHits} hits`, tone: "hits" });
@@ -404,20 +428,34 @@ export function getSearchMatchExplanation(item, query, mode = "hits") {
       .filter((field) => highPriorityKeys.has(field.key))
       .some((field) => collectBoundaryMatchPositions(field.text, token).length > 0)
   );
+  const bodyOnlyTerms = tokenTerms.filter((token) =>
+    !exactMatchedTerms.includes(token) &&
+    fields
+      .filter((field) => !highPriorityKeys.has(field.key))
+      .some((field) => collectBoundaryMatchPositions(field.text, token).length > 0)
+  );
   const includesOnlyTerms = tokenTerms.filter((token) =>
     !exactMatchedTerms.includes(token) &&
+    !bodyOnlyTerms.includes(token) &&
     fields.some((field) => collectSubstringMatchPositions(field.text, token).length > 0)
   );
   const missingTerms = tokenTerms.filter(
-    (token) => !exactMatchedTerms.includes(token) && !includesOnlyTerms.includes(token)
+    (token) =>
+      !exactMatchedTerms.includes(token) &&
+      !bodyOnlyTerms.includes(token) &&
+      !includesOnlyTerms.includes(token)
   );
 
   let baseHeadline = `${rank.totalHits} total hits contributed to ranking.`;
   if (tokenTerms.length) {
     const exactCount = exactMatchedTerms.length;
+    const bodyCount = bodyOnlyTerms.length;
     const includeCount = includesOnlyTerms.length;
     const missingCount = missingTerms.length;
     baseHeadline = `Matched ${exactCount} of ${tokenTerms.length} terms exactly.`;
+    if (bodyCount > 0) {
+      baseHeadline += ` ${bodyCount} term${bodyCount === 1 ? "" : "s"} matched in body.`;
+    }
     if (includeCount > 0) {
       baseHeadline += ` ${includeCount} term${includeCount === 1 ? "" : "s"} matched as includes-only.`;
     }
@@ -426,7 +464,7 @@ export function getSearchMatchExplanation(item, query, mode = "hits") {
     }
   }
 
-  const phraseHeadline = phraseTerms.length
+  const phraseHeadline = phraseTerms.length && rank.exactPhraseHits > 0
     ? ` Phrase hits: ${rank.exactPhraseHits}.`
     : "";
   const hitsHeadline = `${baseHeadline}${phraseHeadline}`;

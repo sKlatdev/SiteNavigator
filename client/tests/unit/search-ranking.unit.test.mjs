@@ -117,3 +117,62 @@ test("getSearchMatchExplanation partial mode limits evidence to partial contribu
   assert.ok(explanation.headline.includes("1 term did not match."));
   assert.ok(explanation.matches.every((match) => match.matchType.startsWith("partial_")));
 });
+
+test("all tokens matching in body but not title ranks as full match tier 2", () => {
+  const item = {
+    id: "f1",
+    title: "Identity Security Overview",
+    tags: ["security"],
+    url: "https://example.com/docs/identity-security",
+    summary: "Cisco provides SAML-based authentication for ASA devices in enterprise deployments",
+    pathSummary: "example.com/docs/identity",
+    category: "docs",
+  };
+
+  const rank = rankItemForQuery(item, "cisco saml asa");
+  assert.equal(rank.tier, 2, "expected full match tier (all terms in body)");
+  assert.equal(rank.hasMatch, true);
+  assert.equal(rank.includesOnly, false);
+});
+
+test("full match tier 2 ranks above partial match tier 3", () => {
+  const fullMatchItem = {
+    id: "fm",
+    title: "Identity Security Overview",
+    tags: ["security"],
+    url: "https://example.com/identity",
+    summary: "Cisco provides SAML-based authentication for ASA devices",
+    pathSummary: "example.com/docs/identity",
+    category: "docs",
+  };
+
+  const partialItem = {
+    id: "pm",
+    title: "Cisco Identity Platform",
+    tags: ["cisco"],
+    url: "https://example.com/cisco",
+    summary: "Overview of the Cisco identity platform",
+    pathSummary: "example.com/cisco",
+    category: "docs",
+  };
+
+  const sorted = sortItemsBySearchPriority([partialItem, fullMatchItem], "cisco saml asa");
+  assert.equal(sorted[0].id, "fm", "full match should outrank partial");
+});
+
+test("getSearchMatchExplanation hits mode reports body-only term count in headline", () => {
+  const item = {
+    id: "f2",
+    title: "Identity Security Overview",
+    tags: ["security"],
+    url: "https://example.com/docs/identity-security",
+    summary: "Cisco provides SAML-based authentication for ASA devices in enterprise deployments",
+    pathSummary: "example.com/docs/identity",
+    category: "docs",
+  };
+
+  const explanation = getSearchMatchExplanation(item, "cisco saml asa", "hits");
+  assert.ok(explanation, "should return an explanation");
+  assert.ok(explanation.headline.includes("Matched 0 of 3 terms exactly."), `unexpected headline: ${explanation.headline}`);
+  assert.ok(explanation.headline.includes("3 terms matched in body."), `unexpected headline: ${explanation.headline}`);
+});
