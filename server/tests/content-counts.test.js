@@ -347,6 +347,78 @@ test("/api/content includes Duo, Okta, Entra, and Ping Identity vendor tags", as
   }
 });
 
+test("/api/content hides stale redirect notice rows from search results and counts", async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sitenavigator-server-test-"));
+  const dataDir = path.join(tmpRoot, "data");
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  const now = new Date().toISOString();
+  const seed = {
+    meta: { createdAt: now, updatedAt: now, schemaVersion: 2 },
+    syncRuns: [],
+    fetchCache: {},
+    content: [
+      {
+        id: "ping_redirect",
+        url: "https://docs.pingidentity.com/integrations/zscaler/index.html",
+        title: "Redirect Notice",
+        summary: "The page you requested has been relocated to https://docs.pingidentity.com/integrations/zscaler/pf_is_overview_of_zscaler.html",
+        category: "competitor_docs",
+        vendor: "Ping Identity",
+        pathSummary: "docs.pingidentity.com/integrations/zscaler/index.html",
+        pageLastUpdated: now.slice(0, 10),
+        contentHash: "redirect-1",
+        firstSeenAt: now,
+        updatedAt: now,
+        active: true,
+      },
+      {
+        id: "ping_real",
+        url: "https://docs.pingidentity.com/integrations/zscaler/pf_is_overview_of_zscaler.html",
+        title: "Zscaler Connector",
+        summary: "Configure Zscaler with Ping Identity.",
+        category: "competitor_docs",
+        vendor: "Ping Identity",
+        pathSummary: "docs.pingidentity.com/integrations/zscaler/pf_is_overview_of_zscaler.html",
+        pageLastUpdated: now.slice(0, 10),
+        contentHash: "real-1",
+        firstSeenAt: now,
+        updatedAt: now,
+        active: true,
+      },
+    ],
+  };
+
+  fs.writeFileSync(path.join(dataDir, "index.json"), JSON.stringify(seed, null, 2), "utf8");
+
+  const port = 9800 + Math.floor(Math.random() * 100);
+  const child = spawn(process.execPath, ["src/server.js"], {
+    cwd: serverRoot,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      SITENAVIGATOR_DATA_DIR: dataDir,
+      CONTENT_CACHE_MAX_AGE: "0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  try {
+    await waitForServerReady(child);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/content?recentDays=14&category=competitor_docs&q=pingidentity.com`);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.counts.competitor_docs, 1);
+    assert.equal(body.returnedCount, 1);
+    assert.equal(body.items[0].title, "Zscaler Connector");
+  } finally {
+    child.kill("SIGTERM");
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test("/api/content keeps newly discovered and recently updated counts disjoint", async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sitenavigator-server-test-"));
   const dataDir = path.join(tmpRoot, "data");

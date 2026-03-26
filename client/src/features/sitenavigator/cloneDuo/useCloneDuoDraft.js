@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  apiDeleteCloneDuoDraft,
   apiExportCloneDuoDraft,
   apiGetCloneDuoDraft,
   apiSaveCloneDuoDraft,
@@ -23,6 +24,14 @@ export function useCloneDuoDraft(stagedItems) {
   const [selectedFieldId, setSelectedFieldId] = useState("");
   const [selectedIssueId, setSelectedIssueId] = useState("");
 
+  function resetDraftState() {
+    setDraft(null);
+    setSelectedSectionId("");
+    setSelectedFieldId("");
+    setSelectedIssueId("");
+    localStorage.removeItem(STORAGE_KEYS.cloneDuoDraftId);
+  }
+
   useEffect(() => {
     const draftId = localStorage.getItem(STORAGE_KEYS.cloneDuoDraftId);
     if (!draftId) return;
@@ -38,7 +47,7 @@ export function useCloneDuoDraft(stagedItems) {
         setSelectedIssueId(response.draft.issues?.[0]?.id || "");
       })
       .catch(() => {
-        localStorage.removeItem(STORAGE_KEYS.cloneDuoDraftId);
+        resetDraftState();
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -118,6 +127,26 @@ export function useCloneDuoDraft(stagedItems) {
     } catch (nextError) {
       setError(nextError?.message || "Failed to export draft.");
       return null;
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function deleteDraft() {
+    if (!draft?.draftId) {
+      resetDraftState();
+      return true;
+    }
+
+    setBusyAction("delete");
+    setError("");
+    try {
+      await apiDeleteCloneDuoDraft(draft.draftId);
+      resetDraftState();
+      return true;
+    } catch (nextError) {
+      setError(nextError?.message || "Failed to delete draft.");
+      return false;
     } finally {
       setBusyAction("");
     }
@@ -204,6 +233,7 @@ export function useCloneDuoDraft(stagedItems) {
     generateDraft,
     saveDraft,
     exportDraft,
+    deleteDraft,
     updateFieldValue,
     acceptFieldOverride,
     updateScreenshotReviewState,

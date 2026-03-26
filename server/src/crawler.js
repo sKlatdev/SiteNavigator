@@ -9,6 +9,7 @@ import {
   addSyncRun,
   updateSyncRun
 } from "./store.js";
+import { detectSoftRedirectPage } from "./contentQuality.js";
 
 /**
  * Optimized crawler:
@@ -519,6 +520,29 @@ export async function runIncrementalSync() {
       syncProgress.scannedCount = stats.scannedCount;
 
       const $ = cheerio.load(html);
+      const redirectInfo = detectSoftRedirectPage($, url);
+      if (redirectInfo.isSoftRedirect) {
+        const now = nowIso();
+        const existing = getByUrl(store, url);
+        if (existing) {
+          upsertContent(store, { ...existing, active: false, lastSeenAt: now, updatedAt: now });
+        }
+
+        const redirectTarget = safeUrl(redirectInfo.targetUrl, url);
+        if (isAllowedUrl(redirectTarget)) {
+          const normalized = normalizeUrl(redirectTarget);
+          if (!visited.has(normalized) && !queuedSet.has(normalized)) {
+            queue.push({ url: normalized, depth });
+            queuedSet.add(normalized);
+            syncProgress.queued = queuedSet.size;
+          }
+        }
+
+        syncProgress.processed += 1;
+        updatePercent();
+        continue;
+      }
+
       const title = $("title").first().text().trim() || "";
       const summary =
         $('meta[name="description"]').attr("content")?.trim() ||

@@ -141,6 +141,13 @@ export async function apiGetCloneDuoDraft(draftId) {
   return handleJson(res);
 }
 
+export async function apiDeleteCloneDuoDraft(draftId) {
+  const res = await fetch(`${API_BASE}/clone-duo/saml/review-draft/${encodeURIComponent(String(draftId || ""))}`, {
+    method: "DELETE",
+  });
+  return handleJson(res);
+}
+
 export async function apiExportCloneDuoDraft(draft) {
   const res = await fetch(`${API_BASE}/clone-duo/saml/export`, {
     method: "POST",

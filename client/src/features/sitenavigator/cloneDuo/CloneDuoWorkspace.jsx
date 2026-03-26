@@ -1,10 +1,10 @@
 import { useDeferredValue } from "react";
-import { CheckCircle2, ClipboardList, Download, ExternalLink, FileWarning, Save, Sparkles } from "lucide-react";
+import { CheckCircle2, ClipboardList, Download, ExternalLink, FileWarning, Save, Sparkles, Trash2 } from "lucide-react";
 
 import { downloadJson } from "../utils";
 import { useCloneDuoDraft } from "./useCloneDuoDraft";
 
-export function CloneDuoWorkspace({ stagedItems, onRemove }) {
+export function CloneDuoWorkspace({ stagedItems, onRemove, onClearStaged }) {
   const {
     draft,
     loading,
@@ -24,6 +24,7 @@ export function CloneDuoWorkspace({ stagedItems, onRemove }) {
     generateDraft,
     saveDraft,
     exportDraft,
+    deleteDraft,
     updateFieldValue,
     acceptFieldOverride,
     updateScreenshotReviewState,
@@ -36,6 +37,10 @@ export function CloneDuoWorkspace({ stagedItems, onRemove }) {
     if (!payload) return;
     downloadText(payload.sidecar.markdownFileName, payload.markdown, "text/markdown");
     downloadJson(payload.sidecar.sidecarFileName, payload.sidecar);
+  }
+
+  async function handleDeleteDraft() {
+    await deleteDraft();
   }
 
   return (
@@ -74,12 +79,30 @@ export function CloneDuoWorkspace({ stagedItems, onRemove }) {
             </button>
             <button
               type="button"
+              onClick={handleDeleteDraft}
+              disabled={!draft || busyAction === "delete"}
+              className="inline-flex items-center gap-2 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-rose-700/70 dark:text-rose-300"
+            >
+              <Trash2 size={14} />
+              {busyAction === "delete" ? "Deleting..." : "Delete Draft"}
+            </button>
+            <button
+              type="button"
               onClick={handleExport}
               disabled={!draft || !draft.summary?.readyToExport || busyAction === "export"}
               className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-emerald-700/70 dark:text-emerald-300"
             >
               <Download size={14} />
               {busyAction === "export" ? "Exporting..." : "Export Markdown + Sidecar"}
+            </button>
+            <button
+              type="button"
+              onClick={onClearStaged}
+              disabled={!stagedItems.length}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-200"
+            >
+              <Trash2 size={14} />
+              Clear Source Set
             </button>
           </div>
         </div>

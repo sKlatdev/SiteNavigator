@@ -53,3 +53,14 @@ export function getCloneDuoDraft(draftId) {
   const store = readDraftStore();
   return (store.drafts || []).find((entry) => entry?.draftId === draftId) || null;
 }
+
+export function deleteCloneDuoDraft(draftId) {
+  const store = readDraftStore();
+  const drafts = Array.isArray(store.drafts) ? store.drafts : [];
+  const nextDrafts = drafts.filter((entry) => entry?.draftId !== draftId);
+  const deleted = nextDrafts.length !== drafts.length;
+  if (deleted) {
+    writeDraftStore({ ...store, drafts: nextDrafts });
+  }
+  return deleted;
+}

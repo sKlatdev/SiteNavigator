@@ -7,10 +7,11 @@ import { fileURLToPath } from "url";
 import { runIncrementalSync, getSyncProgress } from "./crawler.js";
 import { readStore, writeStore, listActiveContent, getLastSyncRun } from "./store.js";
 import { computeRecentSignals } from "./recency.js";
+import { isSoftRedirectRow } from "./contentQuality.js";
 import { buildSourceBundle } from "./cloneDuoExtraction.js";
 import { buildCloneDuoDraft } from "./cloneDuoMapping.js";
 import { buildCloneDuoExport } from "./cloneDuoExport.js";
-import { getCloneDuoDraft, saveCloneDuoDraft } from "./cloneDuoDraftStore.js";
+import { deleteCloneDuoDraft, getCloneDuoDraft, saveCloneDuoDraft } from "./cloneDuoDraftStore.js";
 
 const app = express();
 const cliPortArg = (() => {
@@ -256,9 +257,15 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/sync/status", (_req, res) => {
   const store = readStore();
+  const lastRun = getLastSyncRun(store);
   res.json({
     inProgress,
-    lastRun: getLastSyncRun(store)
+    lastRun: lastRun
+      ? {
+          ...lastRun,
+          durationMs: calculateDurationMs(lastRun.startedAt, lastRun.finishedAt),
+        }
+      : null
   });
 });
 
@@ -292,7 +299,7 @@ app.get("/api/content", (req, res) => {
   const q = String(req.query.q || "").trim().toLowerCase();
   const category = String(req.query.category || "").trim().toLowerCase();
   const store = readStore();
-  let rows = listActiveContent(store);
+  let rows = listActiveContent(store).filter((row) => !isSoftRedirectRow(row));
 
   if (q) {
     rows = rows.filter((r) =>
@@ -459,6 +466,24 @@ app.get("/api/clone-duo/saml/review-draft/:draftId", (req, res) => {
     return res.json({ ok: true, draft });
   } catch (error) {
     return res.status(500).json({ ok: false, message: error?.message || "Failed to load review draft" });
+  }
+});
+
+app.delete("/api/clone-duo/saml/review-draft/:draftId", (req, res) => {
+  try {
+    const draftId = String(req.params.draftId || "").trim();
+    if (!draftId) {
+      return res.status(400).json({ ok: false, message: "draftId required" });
+    }
+
+    const deleted = deleteCloneDuoDraft(draftId);
+    if (!deleted) {
+      return res.status(404).json({ ok: false, message: "Draft not found" });
+    }
+
+    return res.json({ ok: true, draftId });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error?.message || "Failed to delete review draft" });
   }
 });
 
@@ -655,6 +680,15 @@ function startServerWithRetry(startPort, retriesRemaining) {
     }
     process.exit(1);
   });
+}
+
+function calculateDurationMs(startedAt, finishedAt) {
+  const startTs = new Date(startedAt || 0).getTime();
+  const endTs = new Date(finishedAt || 0).getTime();
+  if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || startTs <= 0 || endTs <= 0 || endTs < startTs) {
+    return null;
+  }
+  return endTs - startTs;
 }
 
 startServerWithRetry(PORT, PORT_RETRY_COUNT);

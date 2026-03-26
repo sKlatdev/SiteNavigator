@@ -97,6 +97,19 @@ function EmptyState({ title, text }) {
   );
 }
 
+function formatDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return "unknown";
+  if (durationMs < 1000) return `${Math.round(durationMs)} ms`;
+  const totalSeconds = Math.round(durationMs / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m ${seconds}s`;
+}
+
 function ConfirmModal({
   open,
   title,
@@ -1145,6 +1158,8 @@ function TopBar(props) {
     searchPlaceholder,
     isNavOpen,
   } = props;
+  const lastSyncLabel = syncState?.lastRun?.finishedAt || syncState?.lastRun?.startedAt || "unknown";
+  const lastSyncDuration = formatDuration(syncState?.lastRun?.durationMs);
 
   return (
     <header className="glass-surface mb-6 flex flex-wrap items-center gap-3 p-4 fade-in-up">
@@ -1263,7 +1278,8 @@ function TopBar(props) {
             <span className="text-rose-600 dark:text-rose-300">Sync error: {syncState.error}</span>
           ) : (
             <span>
-              Last sync: {syncState.lastRun?.finishedAt || syncState.lastRun?.startedAt || "unknown"} ·
+              Last sync: {lastSyncLabel} ·
+              duration {lastSyncDuration} ·
               scanned {syncState.lastRun?.scannedCount ?? 0} ·
               new {syncState.lastRun?.discoveredCount ?? 0} ·
               changed {syncState.lastRun?.changedCount ?? 0}
@@ -5514,6 +5530,10 @@ export default function App() {
     setCloneStageItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const clearStagedCloneItems = () => {
+    setCloneStageItems([]);
+  };
+
   const removeCompareSeed = (seedId) => {
     setCompareSeedIds((prev) => prev.filter((id) => id !== seedId));
   };
@@ -6320,7 +6340,7 @@ export default function App() {
         )}
 
         {active === "clone_to_duo_template" && (
-          <CloneDuoWorkspace stagedItems={cloneStageItems} onRemove={removeStagedClone} />
+          <CloneDuoWorkspace stagedItems={cloneStageItems} onRemove={removeStagedClone} onClearStaged={clearStagedCloneItems} />
         )}
 
         {active === "change_heatmap" && (
