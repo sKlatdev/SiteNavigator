@@ -108,3 +108,44 @@ export async function apiLoadIndexFromPath(filePath, mode = "replace") {
   });
   return handleJson(res);
 }
+
+export async function apiBuildCloneDuoSourceBundle(sourceItems) {
+  const res = await fetch(`${API_BASE}/clone-duo/saml/source-bundle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sourceItems }),
+  });
+  return handleJson(res);
+}
+
+export async function apiTransformCloneDuoDraft({ sourceItems, sourceBundle, blueprintFamily }) {
+  const res = await fetch(`${API_BASE}/clone-duo/saml/transform`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sourceItems, sourceBundle, blueprintFamily }),
+  });
+  return handleJson(res);
+}
+
+export async function apiSaveCloneDuoDraft(draft) {
+  const res = await fetch(`${API_BASE}/clone-duo/saml/review-draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ draft }),
+  });
+  return handleJson(res);
+}
+
+export async function apiGetCloneDuoDraft(draftId) {
+  const res = await fetch(`${API_BASE}/clone-duo/saml/review-draft/${encodeURIComponent(String(draftId || ""))}`);
+  return handleJson(res);
+}
+
+export async function apiExportCloneDuoDraft(draft) {
+  const res = await fetch(`${API_BASE}/clone-duo/saml/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ draft }),
+  });
+  return handleJson(res);
+}

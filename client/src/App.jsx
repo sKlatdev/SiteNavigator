@@ -83,6 +83,7 @@ import {
   isIncludesOnlyMatch,
   sortItemsBySearchPriority,
 } from "./features/sitenavigator/searchRanking";
+import { CloneDuoWorkspace } from "./features/sitenavigator/cloneDuo/CloneDuoWorkspace";
 
 /** =========================================================
  * Reusable UI
@@ -2053,231 +2054,6 @@ function WatchlistView({ watchlists, onCreate, onDelete, alerts }) {
         )}
       </section>
     </div>
-  );
-}
-
-function buildDuoCloneInstructionModel(item) {
-  const sourceTitle = String(item?.title || "Competitor integration");
-  const sourceVendor = String(item?.vendor || "Competitor vendor");
-  const sourceUrl = String(item?.url || "");
-  const sourceSummary = String(item?.summary || "");
-  const sourcePath = String(item?.pathSummary || "");
-  const sourceHost = (() => {
-    try {
-      return new URL(sourceUrl).hostname;
-    } catch {
-      return "unknown-host";
-    }
-  })();
-
-  const sourceText = [sourceTitle, sourceSummary, sourcePath, sourceUrl].join(" ").toLowerCase();
-
-  const includeIfMentioned = (terms, field) => {
-    return terms.some((term) => sourceText.includes(String(term).toLowerCase())) ? [field] : [];
-  };
-
-  const samlSpFields = [
-    "SP Entity ID / Audience URI",
-    "Assertion Consumer Service (ACS) URL",
-    "NameID format and value source",
-    "SP x509 signing/encryption cert requirements",
-    ...includeIfMentioned(["relaystate", "relay state"], "RelayState behavior/requirements"),
-    ...includeIfMentioned(["single logout", "slo", "logout"], "Single Logout (SLO) URL + binding"),
-    ...includeIfMentioned(["metadata"], "SP metadata URL or XML descriptor"),
-    ...includeIfMentioned(["attribute", "claim", "group", "role"], "Required attribute statement mapping"),
-  ];
-
-  const oidcSpFields = [
-    "Client ID",
-    "Client Secret",
-    "Redirect URI / Callback URL",
-    "Post Logout Redirect URI",
-    "Response type + grant type expectations",
-    ...includeIfMentioned(["scope", "scopes"], "Required scopes"),
-    ...includeIfMentioned(["pkce"], "PKCE requirement (S256 / verifier policy)"),
-    ...includeIfMentioned(["nonce"], "Nonce requirement"),
-    ...includeIfMentioned(["state"], "State parameter handling"),
-    ...includeIfMentioned(["claim", "claims", "group", "role"], "Required claim mapping"),
-    ...includeIfMentioned(["token endpoint auth", "client_secret_basic", "client_secret_post", "private_key_jwt"], "Token endpoint auth method"),
-  ];
-
-  return {
-    sourceTitle,
-    sourceVendor,
-    sourceUrl,
-    sourceHost,
-    saml: {
-      duoEntityId: "https://sso-XXXXXXXX.duosecurity.com/saml2/sp/DIXXXXXXXXXXXXXXXXXX",
-      acsUrl: "https://sso-XXXXXXXX.duosecurity.com/saml2/sp/DIXXXXXXXXXXXXXXXXXX/acs",
-      metadataUrl: "https://sso-XXXXXXXX.duosecurity.com/saml2/sp/DIXXXXXXXXXXXXXXXXXX/metadata",
-      nameIdFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
-      requiredAttributes: ["email", "firstName", "lastName", "groups"],
-      serviceProviderRequiredFields: Array.from(new Set(samlSpFields)),
-    },
-    oidc: {
-      issuer: "https://sso-XXXXXXXX.duosecurity.com/oauth2",
-      authorizationEndpoint: "https://sso-XXXXXXXX.duosecurity.com/oauth2/authorize",
-      tokenEndpoint: "https://sso-XXXXXXXX.duosecurity.com/oauth2/token",
-      userInfoEndpoint: "https://sso-XXXXXXXX.duosecurity.com/oauth2/userinfo",
-      jwksUri: "https://sso-XXXXXXXX.duosecurity.com/oauth2/keys",
-      scopes: ["openid", "profile", "email", "groups"],
-      claims: ["sub", "email", "email_verified", "given_name", "family_name", "groups"],
-      redirectUri: "https://your-app.example.com/callback/duo",
-      postLogoutRedirectUri: "https://your-app.example.com/logout/callback",
-      serviceProviderRequiredFields: Array.from(new Set(oidcSpFields)),
-    },
-  };
-}
-
-function CloneToDuoTemplateView({ stagedItems, onRemove, onClone }) {
-  return (
-    <div className="space-y-4">
-      <ToolDetailsDisclosure
-        title="Detailed Clone To Duo Template Guide"
-        overview="Stage competitor integration pages and generate Duo-centric setup templates for SAML and OIDC migration patterns."
-        steps={[
-          "Use Stage Clone on competitor result cards.",
-          "Open this tool to review staged competitor pages.",
-          "Click Clone to open a Duo setup blueprint modal with protocol-specific requirements.",
-          "Copy and adapt URLs, scopes, attributes, and mappings into your target integration.",
-        ]}
-        features={[
-          "Competitor-only stage queue",
-          "One-click protocol setup blueprint",
-          "SAML/OIDC field checklist",
-          "Attribute and claim mapping template",
-        ]}
-      />
-      <h2 className="type-display">Clone To Duo Template</h2>
-      {!stagedItems.length ? (
-        <EmptyState title="No staged clone candidates" text="Use Stage Clone on competitor results to build a Duo migration template queue." />
-      ) : (
-        <div className="space-y-3">
-          {stagedItems.map((item) => (
-            <article key={item.id} className="glass-surface p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="type-card-title">{item.title}</p>
-                  <p className="type-micro mt-1">{item.vendor || "Competitor"} · {item.category || "competitor_docs"}</p>
-                  {item.url ? (
-                    <a href={item.url} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-xs text-cyan-700 hover:underline dark:text-cyan-300">
-                      Open source integration page
-                    </a>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className="glass-control px-2 py-1 text-xs" onClick={() => onClone(item)}>
-                    Clone
-                  </button>
-                  <button className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700" onClick={() => onRemove(item.id)}>
-                    Remove
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CloneInstructionsModal({ open, item, onClose }) {
-  if (!open || !item) return null;
-  const model = buildDuoCloneInstructionModel(item);
-  const jsonBlock = JSON.stringify(
-    {
-      source: {
-        title: model.sourceTitle,
-        vendor: model.sourceVendor,
-        url: model.sourceUrl,
-      },
-      saml: {
-        entityId: model.saml.duoEntityId,
-        acsUrl: model.saml.acsUrl,
-        metadataUrl: model.saml.metadataUrl,
-        requiredAttributes: model.saml.requiredAttributes,
-        serviceProviderRequiredFields: model.saml.serviceProviderRequiredFields,
-      },
-      oidc: {
-        issuer: model.oidc.issuer,
-        authorizationEndpoint: model.oidc.authorizationEndpoint,
-        tokenEndpoint: model.oidc.tokenEndpoint,
-        userInfoEndpoint: model.oidc.userInfoEndpoint,
-        jwksUri: model.oidc.jwksUri,
-        scopes: model.oidc.scopes,
-        claims: model.oidc.claims,
-        serviceProviderRequiredFields: model.oidc.serviceProviderRequiredFields,
-      },
-    },
-    null,
-    2
-  );
-
-  return (
-    <BaseModal open={open} onClose={onClose} title={`Clone Setup Blueprint: ${model.sourceTitle}`} widthClass="max-w-5xl">
-      <div className="space-y-4 text-sm">
-        <section className="rounded-lg border border-white/30 bg-white/30 p-3 dark:bg-slate-900/50">
-          <p className="font-semibold">Source Integration</p>
-          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Vendor: {model.sourceVendor} · Host: {model.sourceHost}</p>
-          {model.sourceUrl ? (
-            <a href={model.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-xs text-cyan-700 hover:underline dark:text-cyan-300">
-              Open source page
-            </a>
-          ) : null}
-        </section>
-
-        <section className="rounded-lg border border-white/30 bg-white/30 p-3 dark:bg-slate-900/50">
-          <p className="font-semibold">SAML Integration Template</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-300">
-            <li>SP Entity ID: {model.saml.duoEntityId}</li>
-            <li>ACS URL: {model.saml.acsUrl}</li>
-            <li>Metadata URL: {model.saml.metadataUrl}</li>
-            <li>NameID format: {model.saml.nameIdFormat}</li>
-            <li>Required attributes: {model.saml.requiredAttributes.join(", ")}</li>
-          </ul>
-          <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-200">Service Provider fields you should capture and map into Duo:</p>
-          <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-300">
-            {model.saml.serviceProviderRequiredFields.map((field) => (
-              <li key={field}>{field}</li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Recommended attribute mapping: email to user.mail, firstName to user.givenName, lastName to user.surname, groups to user.memberOf.</p>
-        </section>
-
-        <section className="rounded-lg border border-white/30 bg-white/30 p-3 dark:bg-slate-900/50">
-          <p className="font-semibold">OIDC Integration Template</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-300">
-            <li>Issuer: {model.oidc.issuer}</li>
-            <li>Authorization endpoint: {model.oidc.authorizationEndpoint}</li>
-            <li>Token endpoint: {model.oidc.tokenEndpoint}</li>
-            <li>UserInfo endpoint: {model.oidc.userInfoEndpoint}</li>
-            <li>JWKS URI: {model.oidc.jwksUri}</li>
-            <li>Redirect URI: {model.oidc.redirectUri}</li>
-            <li>Post-logout redirect URI: {model.oidc.postLogoutRedirectUri}</li>
-            <li>Required scopes: {model.oidc.scopes.join(", ")}</li>
-            <li>Expected claims: {model.oidc.claims.join(", ")}</li>
-          </ul>
-          <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-200">Service Provider fields you should capture and map into Duo:</p>
-          <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-300">
-            {model.oidc.serviceProviderRequiredFields.map((field) => (
-              <li key={field}>{field}</li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">OIDC claim mapping suggestion: sub to immutableUserId, email to username/email, groups to authorization groups.</p>
-        </section>
-
-        <section className="rounded-lg border border-white/30 bg-white/30 p-3 dark:bg-slate-900/50">
-          <p className="font-semibold">Structured Template Payload</p>
-          <pre className="mt-2 max-h-56 overflow-auto rounded border border-white/30 bg-white/35 p-2 text-[11px] dark:bg-slate-900/65">{jsonBlock}</pre>
-          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Validate all IDs, secrets, redirect URIs, and group/attribute paths in your tenant before production cutover.</p>
-        </section>
-      </div>
-
-      <div className="mt-5 flex justify-end gap-2">
-        <button onClick={onClose} className="rounded-lg border px-3 py-2">Close</button>
-      </div>
-    </BaseModal>
   );
 }
 
@@ -4384,7 +4160,6 @@ export default function App() {
   );
   const [watchlists, setWatchlists] = useState(() => readStorage(STORAGE_KEYS.watchlists, []));
   const [cloneStageItems, setCloneStageItems] = useState([]);
-  const [cloneInstructionTarget, setCloneInstructionTarget] = useState(null);
   const [compareSeedIds, setCompareSeedIds] = useState(() => readStorage(STORAGE_KEYS.compareSeeds, []));
   const [comparePrefs, setComparePrefs] = useState(() =>
     readStorage(STORAGE_KEYS.comparePrefs, {
@@ -6545,11 +6320,7 @@ export default function App() {
         )}
 
         {active === "clone_to_duo_template" && (
-          <CloneToDuoTemplateView
-            stagedItems={cloneStageItems}
-            onRemove={removeStagedClone}
-            onClone={setCloneInstructionTarget}
-          />
+          <CloneDuoWorkspace stagedItems={cloneStageItems} onRemove={removeStagedClone} />
         )}
 
         {active === "change_heatmap" && (
@@ -6818,13 +6589,6 @@ export default function App() {
           title={statusCustomersModal.title}
           customers={statusCustomersModal.customers}
         />
-
-        <CloneInstructionsModal
-          open={!!cloneInstructionTarget}
-          item={cloneInstructionTarget}
-          onClose={() => setCloneInstructionTarget(null)}
-        />
-
         <CustomerModal
           key={`customer_modal_${openCustomerId || "none"}`}
           open={!!openCustomerId}

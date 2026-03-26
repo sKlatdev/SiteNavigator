@@ -73,6 +73,7 @@ export const STORAGE_KEYS = {
   backupPrefs: "sn_backup_prefs",
   indexPaths: "sn_index_paths",
   debugLogs: "sn_debug_logs",
+  cloneDuoDraftId: "sn_clone_duo_draft_id",
 };
 
 export const MODULE_TYPES = {

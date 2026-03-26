@@ -11,12 +11,20 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173",
     trace: "on-first-retry",
   },
-  webServer: {
-    command: "npm run dev:local",
-    url: "http://127.0.0.1:4173",
-    reuseExistingServer: true,
-    timeout: 120000,
-  },
+  webServer: [
+    {
+      command: "npm run dev:local --prefix ../server",
+      url: "http://127.0.0.1:8788/api/health",
+      reuseExistingServer: true,
+      timeout: 120000,
+    },
+    {
+      command: "npm run dev:e2e",
+      url: "http://127.0.0.1:4173",
+      reuseExistingServer: true,
+      timeout: 120000,
+    },
+  ],
   projects: [
     {
       name: "chromium",

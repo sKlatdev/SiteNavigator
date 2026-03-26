@@ -7,6 +7,10 @@ import { fileURLToPath } from "url";
 import { runIncrementalSync, getSyncProgress } from "./crawler.js";
 import { readStore, writeStore, listActiveContent, getLastSyncRun } from "./store.js";
 import { computeRecentSignals } from "./recency.js";
+import { buildSourceBundle } from "./cloneDuoExtraction.js";
+import { buildCloneDuoDraft } from "./cloneDuoMapping.js";
+import { buildCloneDuoExport } from "./cloneDuoExport.js";
+import { getCloneDuoDraft, saveCloneDuoDraft } from "./cloneDuoDraftStore.js";
 
 const app = express();
 const cliPortArg = (() => {
@@ -18,8 +22,9 @@ const cliPortArg = (() => {
 
   return Number.NaN;
 })();
+const HAS_EXPLICIT_PORT = (Number.isFinite(cliPortArg) && cliPortArg > 0) || Boolean(process.env.PORT);
 const PORT = Number.isFinite(cliPortArg) && cliPortArg > 0 ? cliPortArg : Number(process.env.PORT || 8787);
-const PORT_RETRY_COUNT = Math.max(1, Number(process.env.PORT_RETRY_COUNT || 5));
+const PORT_RETRY_COUNT = HAS_EXPLICIT_PORT ? 1 : Math.max(1, Number(process.env.PORT_RETRY_COUNT || 5));
 const IS_PROD = process.env.NODE_ENV === "production";
 const ENABLE_PATH_IMPORT = process.env.ENABLE_PATH_IMPORT === "true";
 const ENABLE_INDEX_PATH_IO = process.env.ENABLE_INDEX_PATH_IO !== "false";
@@ -391,6 +396,86 @@ app.get("/api/content", (req, res) => {
   });
 });
 
+app.post("/api/clone-duo/saml/source-bundle", async (req, res) => {
+  const sourceItems = Array.isArray(req.body?.sourceItems) ? req.body.sourceItems : [];
+  if (!sourceItems.length) {
+    return res.status(400).json({ ok: false, message: "sourceItems required" });
+  }
+
+  try {
+    const sourceBundle = await buildSourceBundle(sourceItems);
+    return res.json({ ok: true, sourceBundle });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error?.message || "Failed to build source bundle" });
+  }
+});
+
+app.post("/api/clone-duo/saml/transform", async (req, res) => {
+  const sourceItems = Array.isArray(req.body?.sourceItems) ? req.body.sourceItems : [];
+  const sourceBundle = req.body?.sourceBundle;
+  const blueprintFamily = String(req.body?.blueprintFamily || "").trim() || null;
+
+  if (!sourceItems.length && !sourceBundle) {
+    return res.status(400).json({ ok: false, message: "sourceItems or sourceBundle required" });
+  }
+
+  try {
+    const resolvedSourceBundle = sourceBundle || await buildSourceBundle(sourceItems);
+    const draft = await buildCloneDuoDraft({
+      sourceItems,
+      sourceBundle: resolvedSourceBundle,
+      blueprintFamily,
+    });
+    saveCloneDuoDraft(draft);
+    return res.json({ ok: true, draft });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error?.message || "Failed to transform source bundle" });
+  }
+});
+
+app.post("/api/clone-duo/saml/review-draft", (req, res) => {
+  const draft = req.body?.draft;
+  if (!draft || typeof draft !== "object") {
+    return res.status(400).json({ ok: false, message: "draft required" });
+  }
+
+  try {
+    const saved = saveCloneDuoDraft({
+      ...draft,
+      updatedAt: new Date().toISOString(),
+    });
+    return res.json({ ok: true, draft: saved });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error?.message || "Failed to save review draft" });
+  }
+});
+
+app.get("/api/clone-duo/saml/review-draft/:draftId", (req, res) => {
+  try {
+    const draft = getCloneDuoDraft(String(req.params.draftId || ""));
+    if (!draft) {
+      return res.status(404).json({ ok: false, message: "Draft not found" });
+    }
+    return res.json({ ok: true, draft });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error?.message || "Failed to load review draft" });
+  }
+});
+
+app.post("/api/clone-duo/saml/export", (req, res) => {
+  const draft = req.body?.draft;
+  if (!draft || typeof draft !== "object") {
+    return res.status(400).json({ ok: false, message: "draft required" });
+  }
+
+  try {
+    const payload = buildCloneDuoExport(draft);
+    return res.json({ ok: true, ...payload });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error?.message || "Failed to export draft" });
+  }
+});
+
 app.get("/api/index/export", (_req, res) => {
   const store = readStore();
   res.json({
@@ -561,8 +646,9 @@ function startServerWithRetry(startPort, retriesRemaining) {
     }
 
     if (err?.code === "EADDRINUSE") {
-      console.error(
-        `[startup] Failed to bind any port starting at ${PORT}. Set PORT or free the port and retry.`
+      console.error(HAS_EXPLICIT_PORT
+        ? `[startup] Port ${startPort} is already in use. Free that port or choose another explicit port.`
+        : `[startup] Failed to bind any port starting at ${PORT}. Set PORT or free the port and retry.`
       );
     } else {
       console.error(`[startup] Server failed to start: ${err?.message || "Unknown error"}`);
