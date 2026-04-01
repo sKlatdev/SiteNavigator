@@ -120,3 +120,13 @@ test("search facet supports short acronym tokens", () => {
     true
   );
 });
+
+test("quality facets distinguish hub and article pages", () => {
+  const tags = createPresetFacetTagDefinitions([], {});
+  const hubTag = byId(tags, "hub_pages");
+  const articleTag = byId(tags, "article_pages");
+
+  assert.equal(hubTag.predicate({ quality: { indexable: true, contentType: "hub", navigationHeavy: true } }), true);
+  assert.equal(articleTag.predicate({ quality: { indexable: true, contentType: "article", navigationHeavy: false } }), true);
+  assert.equal(articleTag.predicate({ quality: { indexable: false, contentType: "soft_redirect", navigationHeavy: false } }), false);
+});

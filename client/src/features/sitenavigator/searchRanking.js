@@ -273,6 +273,10 @@ export function rankItemForQuery(item, query) {
 
   const totalHits = titlePhraseCapped + exactPhraseBodyHits + titleTokenCapped + bodyTokenHits + includesHits;
 
+  const qualityPenalty = Boolean(item?.quality?.navigationHeavy) || String(item?.quality?.contentType || "") === "hub"
+    ? 140
+    : 0;
+
   const score =
     exactPhraseBodyHits * 1500 +
     titlePhraseCapped * 600 +
@@ -280,7 +284,8 @@ export function rankItemForQuery(item, query) {
     bodyTokenHits * 80 +
     titleTokenCapped * 30 +
     partialTokenHits * 20 +
-    includesHits * 2;
+    includesHits * 2 -
+    qualityPenalty;
 
   return {
     tier,
@@ -291,6 +296,7 @@ export function rankItemForQuery(item, query) {
     exactTokenHits: titleTokenCapped + bodyTokenHits,
     partialTokenHits,
     hasMatch,
+    qualityPenalty,
   };
 }
 

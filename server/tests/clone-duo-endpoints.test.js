@@ -99,6 +99,7 @@ test("/api/sync/status includes durationMs for the last completed run", async ()
     const res = await fetch(`http://127.0.0.1:${port}/api/sync/status`);
     assert.equal(res.status, 200);
     const body = await res.json();
+    assert.ok(["legacy", "ketch"].includes(body.engine));
     assert.equal(body.lastRun.durationMs, 12250);
   } finally {
     child.kill("SIGTERM");
