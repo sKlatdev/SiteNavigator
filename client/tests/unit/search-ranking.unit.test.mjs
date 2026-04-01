@@ -176,3 +176,25 @@ test("getSearchMatchExplanation hits mode reports body-only term count in headli
   assert.ok(explanation.headline.includes("Matched 0 of 3 terms exactly."), `unexpected headline: ${explanation.headline}`);
   assert.ok(explanation.headline.includes("3 terms matched in body."), `unexpected headline: ${explanation.headline}`);
 });
+
+test("article quality outranks navigation-heavy hub pages for the same query", () => {
+  const hub = {
+    id: "hub",
+    title: "Duo Admin MFA setup",
+    tags: ["mfa", "duo"],
+    url: "https://example.com/docs",
+    summary: "Hub summary",
+    pathSummary: "example.com/docs",
+    category: "docs",
+    quality: { indexable: true, contentType: "hub", navigationHeavy: true },
+  };
+  const article = {
+    ...hub,
+    id: "article",
+    url: "https://example.com/docs/mfa",
+    quality: { indexable: true, contentType: "article", navigationHeavy: false },
+  };
+
+  const sorted = sortItemsBySearchPriority([hub, article], "duo mfa");
+  assert.equal(sorted[0].id, "article");
+});

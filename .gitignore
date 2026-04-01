@@ -7,6 +7,7 @@ dist/
 build/
 server/public/
 server/build/
+server/vendor/ketch/
 
 # Coverage and test artifacts
 coverage/

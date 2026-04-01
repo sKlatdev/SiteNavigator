@@ -77,3 +77,25 @@ export function isSoftRedirectRow(row) {
   const summary = normalizeText(row?.summary);
   return /^redirect notice$/i.test(title) && /relocated to|has moved to|redirect(?:ed|ing)? to/i.test(summary);
 }
+
+export function normalizeContentQuality(row) {
+  const incoming = row?.quality && typeof row.quality === "object" ? row.quality : null;
+  const fallbackSoftRedirect = isSoftRedirectRow(row);
+  const contentType = String(
+    incoming?.contentType || incoming?.content_type || (fallbackSoftRedirect ? "soft_redirect" : "article")
+  ).trim() || "article";
+  const navigationHeavy = Boolean(incoming?.navigationHeavy ?? incoming?.navigation_heavy);
+  const redirectTarget = normalizeText(incoming?.redirectTarget || incoming?.redirect_target || row?.redirectTarget || "");
+  const indexable = contentType === "soft_redirect"
+    ? false
+    : incoming?.indexable === false
+      ? false
+      : true;
+
+  return {
+    indexable,
+    contentType,
+    navigationHeavy,
+    redirectTarget,
+  };
+}

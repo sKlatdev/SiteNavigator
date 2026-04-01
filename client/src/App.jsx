@@ -60,11 +60,13 @@ import {
   ensureTemplateShape,
   flattenTemplateItems,
   getFocusableElements,
+  getQualityPresentation,
   getTemplateItemKey,
   getTemplateItemsWithModule,
   isArray,
   mapIndexedToCatalogItem,
   mergeById,
+  normalizeQualityMetadata,
   normalizeTemplateModules,
   nowIso,
   readStorage,
@@ -83,6 +85,16 @@ import {
   isIncludesOnlyMatch,
   sortItemsBySearchPriority,
 } from "./features/sitenavigator/searchRanking";
+import {
+  buildRelatedMatchDiagnostics,
+  buildRelatedVendorBuckets,
+  changedWeight,
+  findRelatedCompareItems,
+  relationConfidence,
+  relationScore,
+  summarizeTopicTitle,
+  tokenizeRelationText,
+} from "./features/sitenavigator/compareMatching";
 import { CloneDuoWorkspace } from "./features/sitenavigator/cloneDuo/CloneDuoWorkspace";
 
 /** =========================================================
@@ -108,6 +120,26 @@ function formatDuration(durationMs) {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return `${hours}h ${remainingMinutes}m ${seconds}s`;
+}
+
+function formatSyncEngineLabel(engine) {
+  return String(engine || "").toLowerCase() === "ketch" ? "Ketch" : "Legacy";
+}
+
+function formatSyncVendorLabel(vendor) {
+  const value = String(vendor || "").trim().toLowerCase();
+  if (value === "pingidentity") return "Ping Identity";
+  if (value === "okta") return "Okta";
+  if (value === "entra") return "Entra";
+  if (value === "duo") return "Duo";
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+}
+
+function syncEngineBadgeClass(engine) {
+  if (String(engine || "").toLowerCase() === "ketch") {
+    return "border border-cyan-300/70 bg-cyan-100/80 text-cyan-900 dark:border-cyan-700/80 dark:bg-cyan-900/35 dark:text-cyan-200";
+  }
+  return "border border-slate-300/70 bg-slate-100/80 text-slate-700 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200";
 }
 
 function ConfirmModal({
@@ -225,6 +257,57 @@ function BadgeRecentlyUpdated({ recentlyUpdated, recentReason }) {
     <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
       {label}
     </span>
+  );
+}
+
+function qualityBadgeToneClass(tone) {
+  if (tone === "emerald") {
+    return "border border-emerald-300/70 bg-emerald-100/80 text-emerald-900 dark:border-emerald-700/80 dark:bg-emerald-900/35 dark:text-emerald-200";
+  }
+  if (tone === "sky") {
+    return "border border-sky-300/70 bg-sky-100/80 text-sky-900 dark:border-sky-700/80 dark:bg-sky-900/35 dark:text-sky-200";
+  }
+  if (tone === "amber") {
+    return "border border-amber-300/70 bg-amber-100/80 text-amber-900 dark:border-amber-700/80 dark:bg-amber-900/35 dark:text-amber-200";
+  }
+  return "border border-slate-300/70 bg-slate-100/80 text-slate-800 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200";
+}
+
+function summarizeRedirectTarget(rawUrl) {
+  if (!rawUrl) return "";
+  try {
+    const url = new URL(rawUrl);
+    const path = `${url.hostname}${url.pathname}`.replace(/\/$/, "");
+    return path || url.hostname;
+  } catch {
+    return String(rawUrl);
+  }
+}
+
+function QualitySignals({ quality, compact = false, showHelper = false }) {
+  const presentation = getQualityPresentation(quality);
+  const redirectLabel = summarizeRedirectTarget(presentation.redirectTarget);
+  const shouldShowHelper = showHelper && (presentation.quality.contentType !== "article" || !!presentation.redirectTarget);
+
+  return (
+    <div className={compact ? "mt-1 flex flex-wrap items-center gap-1.5" : "mt-2 flex flex-wrap items-center gap-1.5"}>
+      {presentation.badges.map((badge) => (
+        <span
+          key={badge.key}
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${qualityBadgeToneClass(badge.tone)}`}
+        >
+          {badge.label}
+        </span>
+      ))}
+      {redirectLabel ? (
+        <span className="max-w-full truncate rounded-full border border-slate-300/70 bg-slate-100/80 px-1.5 py-0.5 text-[10px] leading-none text-slate-700 dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-200">
+          Redirect target: {redirectLabel}
+        </span>
+      ) : null}
+      {shouldShowHelper ? (
+        <p className="basis-full text-[11px] text-slate-500 dark:text-slate-300">{presentation.helper}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1160,6 +1243,8 @@ function TopBar(props) {
   } = props;
   const lastSyncLabel = syncState?.lastRun?.finishedAt || syncState?.lastRun?.startedAt || "unknown";
   const lastSyncDuration = formatDuration(syncState?.lastRun?.durationMs);
+  const syncEngineLabel = formatSyncEngineLabel(syncState?.engine);
+  const currentVendorLabel = formatSyncVendorLabel(syncState?.progress?.currentVendor);
 
   return (
     <header className="glass-surface mb-6 flex flex-wrap items-center gap-3 p-4 fade-in-up">
@@ -1241,6 +1326,10 @@ function TopBar(props) {
         {syncState?.loading || syncState?.inProgress ? "Resyncing..." : "Resync"}
       </button>
 
+      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${syncEngineBadgeClass(syncState?.engine)}`}>
+        Sync: {syncEngineLabel}
+      </span>
+
       {isContentView && !!activeFacetTags.length && (
         <div className="w-full mt-1 flex flex-wrap items-center gap-1.5">
           {activeFacetTags.map((tag) => (
@@ -1278,6 +1367,7 @@ function TopBar(props) {
             <span className="text-rose-600 dark:text-rose-300">Sync error: {syncState.error}</span>
           ) : (
             <span>
+              Engine {syncEngineLabel} ·
               Last sync: {lastSyncLabel} ·
               duration {lastSyncDuration} ·
               scanned {syncState.lastRun?.scannedCount ?? 0} ·
@@ -1297,12 +1387,23 @@ function TopBar(props) {
             />
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
-            {syncState?.progress?.percent ?? 0}% · processed{" "}
-            {syncState?.progress?.processed ?? 0} / {syncState?.progress?.queued ?? 0}
-            {syncState?.progress?.currentDepth !== undefined
+            {syncEngineLabel} ·
+            {syncState?.engine === "ketch"
+              ? ` vendor ${syncState?.progress?.completedVendors ?? 0} / ${syncState?.progress?.totalVendors ?? syncState?.progress?.queued ?? 0}`
+              : ` ${syncState?.progress?.percent ?? 0}% · processed ${syncState?.progress?.processed ?? 0} / ${syncState?.progress?.queued ?? 0}`}
+            {syncState?.engine === "ketch" ? ` · pages scanned ${syncState?.progress?.scannedCount ?? 0}` : ""}
+            {syncState?.engine === "ketch" ? ` · new ${syncState?.progress?.discoveredCount ?? 0}` : ""}
+            {syncState?.engine === "ketch" ? ` · changed ${syncState?.progress?.changedCount ?? 0}` : ""}
+            {currentVendorLabel ? ` · active vendor ${currentVendorLabel}` : ""}
+            {syncState?.progress?.currentDepth !== undefined && syncState?.engine !== "ketch"
               ? ` · depth ${syncState.progress.currentDepth}`
               : ""}
           </div>
+          {syncState?.progress?.currentUrl ? (
+            <div className="mt-1 truncate text-[11px] text-slate-500">
+              {syncState?.engine === "ketch" ? "Current page" : "Current URL"}: {syncState.progress.currentUrl}
+            </div>
+          ) : null}
         </div>
       )}
     </header>
@@ -1587,6 +1688,7 @@ function CatalogCard({ item, query, onAdd, onTagClick, onCompare, onStageClone }
         })}
         {item.pathSummary && <span>· {item.pathSummary}</span>}
       </div>
+      <QualitySignals quality={item.quality} showHelper />
       <p className="text-glass-secondary mt-3 text-sm">{item.summary}</p>
       <div className="mt-4 flex gap-2">
         <button
@@ -1795,6 +1897,7 @@ function CompareModeView({
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Seed Item</p>
                 <p className="mt-1 text-sm font-medium">{pair.seedTitle}</p>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{pair.seedSummary || "No summary available."}</p>
+                <QualitySignals quality={pair.seedQuality} compact />
                 {pair.seedUrl && (
                   <a className="mt-2 inline-flex text-xs text-cyan-700 hover:underline dark:text-cyan-300" href={pair.seedUrl} target="_blank" rel="noreferrer">
                     Open seed page
@@ -1802,34 +1905,7 @@ function CompareModeView({
                 )}
               </article>
 
-              <article className="rounded-xl border border-white/35 bg-white/25 p-3 dark:border-slate-700/60 dark:bg-slate-900/40">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Related Matches</p>
-                {!pair.related.length ? (
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">No strong related competitor results yet.</p>
-                ) : (
-                  <div className="mt-1 space-y-2">
-                    {pair.related.map((match) => (
-                      <div key={match.id} className="rounded-lg border border-white/30 bg-white/20 p-2 dark:border-slate-700/50 dark:bg-slate-900/30">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium">{match.title}</p>
-                          <button className="rounded border border-cyan-300 px-1.5 py-0.5 text-[10px] text-cyan-800 dark:border-cyan-700 dark:text-cyan-200" onClick={() => onTogglePinnedMatch?.(pair.seedId, match.id)}>
-                            {match.pinned ? "Pinned" : "Pin"}
-                          </button>
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-300">
-                          {match.vendor} · score {match.relationScore} · {match.relationConfidence}
-                        </p>
-                        {!!match.boostedTokens?.length && (
-                          <p className="text-[11px] text-cyan-700 dark:text-cyan-300">boost: {match.boostedTokens.join(", ")}</p>
-                        )}
-                        <a className="text-[11px] text-cyan-700 hover:underline dark:text-cyan-300" href={match.url} target="_blank" rel="noreferrer">
-                          Open match
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </article>
+              <RelatedMatchesPanel pair={pair} onTogglePinnedMatch={onTogglePinnedMatch} />
             </div>
           </div>
         ))}
@@ -1837,6 +1913,156 @@ function CompareModeView({
         </>
       )}
     </div>
+  );
+}
+
+function CompareDiagnosticsPanel({ diagnostics }) {
+  const scopeLabel = diagnostics.activeVendor === "all" ? "All vendors" : diagnostics.activeVendor;
+
+  return (
+    <section className="mt-2 rounded-lg border border-white/30 bg-white/20 p-2 dark:border-slate-700/50 dark:bg-slate-900/30" aria-label="Compare diagnostics">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+        <span className="rounded-full border border-white/35 bg-white/35 px-2 py-0.5 dark:border-slate-700/60 dark:bg-slate-900/55">
+          Scope: {scopeLabel}
+        </span>
+        <span className="rounded-full border border-white/35 bg-white/35 px-2 py-0.5 dark:border-slate-700/60 dark:bg-slate-900/55">
+          Visible: {diagnostics.visibleMatches.length} / {diagnostics.totalMatches}
+        </span>
+        <span className="rounded-full border border-white/35 bg-white/35 px-2 py-0.5 dark:border-slate-700/60 dark:bg-slate-900/55">
+          Top score: {diagnostics.topScore}
+        </span>
+        <span className="rounded-full border border-white/35 bg-white/35 px-2 py-0.5 dark:border-slate-700/60 dark:bg-slate-900/55">
+          Pinned: {diagnostics.pinnedCount}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-300">
+        {diagnostics.vendorBuckets.map((bucket) => (
+          <span
+            key={bucket.vendor}
+            className={`rounded-full border px-2 py-0.5 ${
+              bucket.visible
+                ? "border-cyan-300/70 bg-cyan-100/65 text-cyan-900 dark:border-cyan-700 dark:bg-cyan-900/35 dark:text-cyan-200"
+                : "border-white/35 bg-white/35 text-slate-600 dark:border-slate-700/60 dark:bg-slate-900/55 dark:text-slate-200"
+            }`}
+          >
+            {bucket.vendor}: {bucket.count} match{bucket.count === 1 ? "" : "es"} · top {bucket.topScore}
+            {bucket.pinnedCount ? ` · pinned ${bucket.pinnedCount}` : ""}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RelatedMatchesPanel({ pair, onTogglePinnedMatch }) {
+  const vendorBuckets = useMemo(() => buildRelatedVendorBuckets(pair.related), [pair.related]);
+  const [activeVendor, setActiveVendor] = useState("all");
+  const tabRefs = useRef([]);
+
+  const diagnostics = useMemo(() => buildRelatedMatchDiagnostics(pair.related, activeVendor), [activeVendor, pair.related]);
+  const resolvedActiveVendor = diagnostics.activeVendor;
+
+  useEffect(() => {
+    const availableValues = new Set(["all", ...vendorBuckets.map((bucket) => bucket.vendor)]);
+    if (!availableValues.has(activeVendor) || activeVendor !== resolvedActiveVendor) {
+      setActiveVendor(resolvedActiveVendor);
+    }
+  }, [activeVendor, resolvedActiveVendor, vendorBuckets]);
+
+  const tabs = useMemo(() => {
+    const allCount = pair.related.length;
+    const bucketTabs = vendorBuckets.map((bucket) => ({ value: bucket.vendor, label: bucket.vendor, count: bucket.matches.length }));
+    return bucketTabs.length > 1 ? [{ value: "all", label: "All", count: allCount }, ...bucketTabs] : bucketTabs;
+  }, [pair.related.length, vendorBuckets]);
+  const visibleMatches = diagnostics.visibleMatches;
+
+  const onTabKeyDown = useCallback(
+    (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || !tabs.length) {
+        return;
+      }
+      event.preventDefault();
+      const currentIndex = Math.max(0, tabs.findIndex((tab) => tab.value === resolvedActiveVendor));
+      let nextIndex = currentIndex;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+      if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = tabs.length - 1;
+      const nextTab = tabs[nextIndex];
+      if (!nextTab) return;
+      setActiveVendor(nextTab.value);
+      tabRefs.current[nextIndex]?.focus();
+    },
+    [resolvedActiveVendor, tabs]
+  );
+
+  return (
+    <article className="rounded-xl border border-white/35 bg-white/25 p-3 dark:border-slate-700/60 dark:bg-slate-900/40">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Related Matches</p>
+      {!pair.related.length ? (
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">No strong related competitor results yet.</p>
+      ) : (
+        <>
+          {tabs.length ? (
+            <div className="mt-2" role="tablist" aria-label={`Related vendors for ${pair.seedTitle}`} onKeyDown={onTabKeyDown}>
+              <div className="flex flex-wrap gap-1.5">
+                {tabs.map((tab, index) => {
+                  const isActive = tab.value === resolvedActiveVendor;
+                  return (
+                    <button
+                      key={`${pair.seedId}_${tab.value}`}
+                      ref={(element) => {
+                        tabRefs.current[index] = element;
+                      }}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      tabIndex={isActive ? 0 : -1}
+                      onClick={() => setActiveVendor(tab.value)}
+                      className={`rounded-full border px-2 py-1 text-[11px] font-medium transition ${
+                        isActive
+                          ? "border-cyan-300 bg-cyan-100 text-cyan-900 dark:border-cyan-700 dark:bg-cyan-900/35 dark:text-cyan-100"
+                          : "border-white/35 bg-white/35 text-slate-600 dark:border-slate-700/60 dark:bg-slate-900/55 dark:text-slate-200"
+                      }`}
+                    >
+                      {tab.label} ({tab.count})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <CompareDiagnosticsPanel diagnostics={diagnostics} />
+
+          <div className="mt-2 space-y-2" role="tabpanel">
+            {visibleMatches.map((match) => (
+              <div key={match.id} className="rounded-lg border border-white/30 bg-white/20 p-2 dark:border-slate-700/50 dark:bg-slate-900/30">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium">{match.title}</p>
+                  <button
+                    className="rounded border border-cyan-300 px-1.5 py-0.5 text-[10px] text-cyan-800 dark:border-cyan-700 dark:text-cyan-200"
+                    onClick={() => onTogglePinnedMatch?.(pair.seedId, match.id)}
+                  >
+                    {match.pinned ? "Pinned" : "Pin"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-300">
+                  {match.vendor} · score {match.relationScore} · {match.relationConfidence}
+                </p>
+                <QualitySignals quality={match.quality} compact />
+                {!!match.boostedTokens?.length && (
+                  <p className="text-[11px] text-cyan-700 dark:text-cyan-300">boost: {match.boostedTokens.join(", ")}</p>
+                )}
+                <a className="text-[11px] text-cyan-700 hover:underline dark:text-cyan-300" href={match.url} target="_blank" rel="noreferrer">
+                  Open match
+                </a>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </article>
   );
 }
 
@@ -1924,6 +2150,7 @@ function SmartGapFinderView({ items, onTagClick, onFeedback, hasRun, onRun }) {
               <span className="rounded-full border border-white/35 bg-white/35 px-2 py-0.5 dark:border-slate-700/60 dark:bg-slate-900/55">Severity: {gap.severity}</span>
               <span className="rounded-full border border-white/35 bg-white/35 px-2 py-0.5 dark:border-slate-700/60 dark:bg-slate-900/55">Evidence: {gap.evidenceCount}</span>
             </div>
+            <QualitySignals quality={gap.quality} compact />
             {!!gap.whyFlagged && (
               <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Why flagged: {gap.whyFlagged}</p>
             )}
@@ -2237,7 +2464,8 @@ function FacetedTagFilterPanel({
 function isOktaItem(item) {
   if (String(item?.vendor || "").toLowerCase() === "okta") return true;
   try {
-    return new URL(String(item?.url || "")).hostname.toLowerCase().includes("help.okta.com");
+    const host = new URL(String(item?.url || "")).hostname.toLowerCase();
+    return host === "help.okta.com" || host.endsWith(".help.okta.com") || host === "saml-doc.okta.com" || host.endsWith(".saml-doc.okta.com");
   } catch {
     return false;
   }
@@ -2309,104 +2537,6 @@ function toTopicKey(item) {
   return normalizeTopicLabel(item?.pathSummary || item?.url || "");
 }
 
-function changedWeight(item) {
-  if (item?.recentReason === "new_page") return 3;
-  if (item?.recentReason === "changed_content") return 2;
-  return item?.recentlyUpdated ? 1 : 0;
-}
-
-const RELATION_STOP_WORDS = new Set([
-  "the",
-  "and",
-  "for",
-  "with",
-  "from",
-  "into",
-  "your",
-  "this",
-  "that",
-  "how",
-  "what",
-  "when",
-  "why",
-  "using",
-  "guide",
-  "docs",
-  "documentation",
-  "duo",
-  "okta",
-  "entra",
-  "ping",
-  "identity",
-]);
-
-function tokenizeRelationText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((token) => token.length > 2 && !RELATION_STOP_WORDS.has(token));
-}
-
-function toTitleCaseWords(value) {
-  return String(value || "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function summarizeTopicTitle(value, maxWords = 8) {
-  const cleaned = String(value || "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  const words = cleaned.split(" ").filter(Boolean).slice(0, maxWords);
-  return toTitleCaseWords(words.join(" ")) || "Untitled Topic";
-}
-
-function relationScore(seed, candidate, options = {}) {
-  const boosts = Array.isArray(options.boostTerms) ? options.boostTerms : [];
-  const vendorPriority = options.vendorPriority || "balanced";
-
-  const seedTokens = new Set(tokenizeRelationText([seed?.title, seed?.summary, seed?.pathSummary].join(" ")));
-  if (!seedTokens.size) return 0;
-
-  const candidateTokens = tokenizeRelationText([candidate?.title, candidate?.summary, candidate?.pathSummary].join(" "));
-  let overlap = 0;
-  const matchedTokens = [];
-  candidateTokens.forEach((token) => {
-    if (seedTokens.has(token)) {
-      overlap += 1;
-      matchedTokens.push(token);
-    }
-  });
-
-  let score = overlap;
-  if ((seed?.category || "") === (candidate?.category || "")) score += 1;
-  if (changedWeight(candidate) > 0) score += 1;
-
-  const boostedTokens = [];
-  boosts.forEach((term) => {
-    const normalized = String(term || "").toLowerCase();
-    if (!normalized) return;
-    const candidateHaystack = [candidate?.title, candidate?.summary, candidate?.pathSummary].join(" ").toLowerCase();
-    if (candidateHaystack.includes(normalized)) {
-      score += 2;
-      boostedTokens.push(normalized);
-    }
-  });
-
-  const candidateVendor = String(candidate?.vendor || "Duo").toLowerCase();
-  if (vendorPriority === "duo_first" && candidateVendor === "duo") score += 1;
-  if (vendorPriority === "competitor_first" && candidateVendor !== "duo") score += 1;
-
-  return { score, matchedTokens, boostedTokens };
-}
-
-function relationConfidence(score) {
-  if (score >= 8) return "high";
-  if (score >= 4) return "medium";
-  return "low";
-}
-
 function gapTypeForItem(item) {
   const path = String(item?.pathSummary || item?.url || "").toLowerCase();
   const title = String(item?.title || "").toLowerCase();
@@ -2445,33 +2575,12 @@ function buildAutoBriefsFromMap(byVendor) {
     .sort((a, b) => (a.severity < b.severity ? 1 : -1));
 }
 
-function findRelatedCompareItems(seed, catalog, limit = 6, options = {}) {
-  const seedVendor = String(seed?.vendor || "Duo");
-  const isSeedDuo = seedVendor.toLowerCase() === "duo";
+function isIndexableCatalogItem(item) {
+  return item?.quality?.indexable !== false;
+}
 
-  const candidates = catalog.filter((item) => {
-    const vendor = String(item.vendor || "Duo");
-    if (!item?.id || item.id === seed?.id) return false;
-    if (vendor === seedVendor) return false;
-    if (isSeedDuo) return item.category === "competitor_docs";
-    return vendor.toLowerCase() === "duo" || item.category === "competitor_docs";
-  });
-
-  return candidates
-    .map((item) => {
-      const scoreMeta = relationScore(seed, item, options);
-      return { item, scoreMeta };
-    })
-    .filter((entry) => entry.scoreMeta.score > 0)
-    .sort((a, b) => b.scoreMeta.score - a.scoreMeta.score || String(a.item.title || "").localeCompare(String(b.item.title || "")))
-    .slice(0, limit)
-    .map((entry) => ({
-      ...entry.item,
-      relationScore: entry.scoreMeta.score,
-      relationConfidence: relationConfidence(entry.scoreMeta.score),
-      matchedTokens: entry.scoreMeta.matchedTokens,
-      boostedTokens: entry.scoreMeta.boostedTokens,
-    }));
+function isNavigationHeavyContent(item) {
+  return Boolean(item?.quality?.navigationHeavy) || String(item?.quality?.contentType || "") === "hub";
 }
 
 const URL_SEGMENT_CACHE = new Map();
@@ -4129,9 +4238,22 @@ export default function App() {
   const [syncState, setSyncState] = useState({
     loading: false,
     inProgress: false,
+    engine: "legacy",
     lastRun: null,
     error: "",
-    progress: { percent: 0, processed: 0, queued: 0, currentUrl: "", currentDepth: 0 },
+    progress: {
+      percent: 0,
+      processed: 0,
+      queued: 0,
+      completedVendors: 0,
+      totalVendors: 0,
+      currentVendor: "",
+      currentUrl: "",
+      currentDepth: 0,
+      scannedCount: 0,
+      discoveredCount: 0,
+      changedCount: 0,
+    },
   });
   const [contentState, setContentState] = useState({
     loading: false,
@@ -4620,12 +4742,11 @@ export default function App() {
       slice.forEach((seedId, offset) => {
         const seed = byId.get(seedId);
         if (!seed) return;
-        const relatedRaw = findRelatedCompareItems(seed, catalog, 8, { vendorPriority, boostTerms });
+        const relatedRaw = findRelatedCompareItems(seed, catalog, 6, { vendorPriority, boostTerms });
         const pinnedIds = new Set(Array.isArray(pinnedBySeed[seed.id]) ? pinnedBySeed[seed.id] : []);
         const related = relatedRaw
           .map((item) => ({ ...item, pinned: pinnedIds.has(item.id) }))
-          .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.relationScore - a.relationScore)
-          .slice(0, 6);
+          .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.relationScore - a.relationScore);
         built.push({
           id: `cmp_${startIndex + offset}_${seed.id}`,
           seedId: seed.id,
@@ -4641,6 +4762,7 @@ export default function App() {
           url: seed.url,
           seedTitle: seed.title,
           seedSummary: seed.summary,
+          seedQuality: seed.quality,
           seedUrl: seed.url,
           related,
         });
@@ -4677,7 +4799,7 @@ export default function App() {
 
     let cancelled = false;
     const feedbackSnapshot = { ...gapFeedback };
-    const duoItems = catalog.filter((item) => String(item.vendor || "Duo").toLowerCase() === "duo");
+    const duoItems = catalog.filter((item) => String(item.vendor || "Duo").toLowerCase() === "duo" && isIndexableCatalogItem(item));
     const duoById = new Map(duoItems.map((item) => [item.id, item]));
     const duoTokenIndex = new Map();
     duoItems.forEach((item) => {
@@ -4699,7 +4821,7 @@ export default function App() {
       topicVendorSpread.set(topic, current);
     });
 
-    const competitorItems = catalog.filter((item) => item.category === "competitor_docs");
+    const competitorItems = catalog.filter((item) => item.category === "competitor_docs" && isIndexableCatalogItem(item) && !isNavigationHeavyContent(item));
     const minimumStrongGapEvidence = 2;
     const built = [];
     const chunkSize = 20;
@@ -4719,7 +4841,7 @@ export default function App() {
           ids.forEach((id) => candidateIds.add(id));
         });
 
-        const relatedCandidates = [...candidateIds]
+        const rankedCandidates = [...candidateIds]
           .slice(0, 120)
           .map((id) => duoById.get(id))
           .filter(Boolean)
@@ -4733,7 +4855,10 @@ export default function App() {
               boostedTokens: scoreMeta.boostedTokens,
             };
           })
-          .filter((candidate) => candidate.relationScore > 0)
+          .filter((candidate) => candidate.relationScore > 0);
+
+        const articleCandidates = rankedCandidates.filter((candidate) => !isNavigationHeavyContent(candidate));
+        const relatedCandidates = (articleCandidates.length ? articleCandidates : rankedCandidates)
           .sort((a, b) => b.relationScore - a.relationScore)
           .slice(0, 3);
 
@@ -5319,6 +5444,7 @@ export default function App() {
       const status = await apiGetSyncStatus();
       setSyncState((prev) => ({
         ...prev,
+        engine: status.engine || prev.engine || "legacy",
         inProgress: !!status.inProgress,
         lastRun: status.lastRun || null,
         error: "",
@@ -5348,7 +5474,7 @@ export default function App() {
         const isEcosystemMarketplaceUrl = /^https?:\/\/ecosystem\.duo\.com\//i.test(String(x.url || ""));
         const derivedVendor =
           x.vendor ||
-          (String(x.url || "").includes("help.okta.com")
+          (/https?:\/\/(?:[^/]*\.)?(?:help|saml-doc)\.okta\.com\//i.test(String(x.url || ""))
             ? "Okta"
             : String(x.url || "").includes("docs.pingidentity.com")
               ? "Ping Identity"
@@ -5371,6 +5497,7 @@ export default function App() {
           updatedAt: x.updatedAt,
           recentlyUpdated: !!x.recentlyUpdated,
           recentReason: x.recentReason || "none",
+          quality: normalizeQualityMetadata(x?.quality),
         };
       });
       const derivedCounts = {
@@ -5696,13 +5823,20 @@ export default function App() {
         const p = r?.progress || {};
         setSyncState((prev) => ({
           ...prev,
+          engine: p.engine || prev.engine || "legacy",
           inProgress: !!p.inProgress,
           progress: {
             percent: p.percent ?? 0,
             processed: p.processed ?? 0,
             queued: p.queued ?? 0,
+            completedVendors: p.completedVendors ?? 0,
+            totalVendors: p.totalVendors ?? 0,
+            currentVendor: p.currentVendor || "",
             currentUrl: p.currentUrl || "",
             currentDepth: p.currentDepth ?? 0,
+            scannedCount: p.scannedCount ?? 0,
+            discoveredCount: p.discoveredCount ?? 0,
+            changedCount: p.changedCount ?? 0,
           },
         }));
         retryDelay = 1000;
@@ -5742,7 +5876,19 @@ export default function App() {
         loading: true,
         inProgress: true,
         error: "",
-        progress: { percent: 0, processed: 0, queued: 0, currentUrl: "", currentDepth: 0 },
+        progress: {
+          percent: 0,
+          processed: 0,
+          queued: 0,
+          completedVendors: 0,
+          totalVendors: 0,
+          currentVendor: "",
+          currentUrl: "",
+          currentDepth: 0,
+          scannedCount: 0,
+          discoveredCount: 0,
+          changedCount: 0,
+        },
       }));
       pushDebugLog({ level: "info", area: "sync", action: "RESYNC_STARTED", message: "Incremental resync started" });
       await apiRunSync();
