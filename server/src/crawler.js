@@ -28,6 +28,7 @@ const START_POINTS = [
   "https://help.duo.com",
   "https://demo.duo.com",
   "https://help.okta.com",
+  "https://saml-doc.okta.com",
   "https://docs.pingidentity.com",
   "https://learn.microsoft.com/en-us/entra/identity/saas-apps",
   "https://learn.microsoft.com/en-us/entra/identity/saas-apps/tutorial-list"
@@ -40,6 +41,7 @@ const ALLOWED_HOSTS = [
   "help.duo.com",
   "demo.duo.com",
   "help.okta.com",
+  "saml-doc.okta.com",
   "docs.pingidentity.com",
   "learn.microsoft.com"
 ];
@@ -48,6 +50,7 @@ const MAX_DEPTH_DEFAULT = 3;
 const MAX_DEPTH_BY_HOST = {
   "help.duo.com": 4,
   "help.okta.com": 3,
+  "saml-doc.okta.com": 3,
   "docs.pingidentity.com": 3,
   "learn.microsoft.com": 3
 };
@@ -106,6 +109,11 @@ function findLocaleSegment(pathname) {
   return match[0].replace(/^\//, "");
 }
 
+function isEnglishLocalePath(pathname) {
+  const locale = findLocaleSegment(pathname);
+  return !locale || locale === "en-us";
+}
+
 function isAllowedEntraSaasPath(pathname) {
   const p = String(pathname || "").toLowerCase();
   return /^\/(?:en-us\/)?entra\/identity\/saas-apps(?:\/[^/?#]+)?\/?$/i.test(p);
@@ -119,7 +127,14 @@ function isAllowedUrl(urlObj) {
   const p = (urlObj.pathname || "").toLowerCase();
   const host = urlObj.hostname.toLowerCase();
 
-  if (host === "help.okta.com" || host.endsWith(".help.okta.com")) {
+  if (!isEnglishLocalePath(p)) return false;
+
+  if (
+    host === "help.okta.com" ||
+    host.endsWith(".help.okta.com") ||
+    host === "saml-doc.okta.com" ||
+    host.endsWith(".saml-doc.okta.com")
+  ) {
     const locale = findLocaleSegment(p);
     if (locale && locale !== "en-us") return false;
   }
@@ -169,7 +184,14 @@ function categorize(urlStr) {
   if (host === "guide.duo.com" || host.endsWith(".guide.duo.com")) return "guides";
   if (host === "help.duo.com" || host.endsWith(".help.duo.com")) return "help_kb";
   if (host === "demo.duo.com" || host.endsWith(".demo.duo.com")) return "demos";
-  if (host === "help.okta.com" || host.endsWith(".help.okta.com")) return "competitor_docs";
+  if (
+    host === "help.okta.com" ||
+    host.endsWith(".help.okta.com") ||
+    host === "saml-doc.okta.com" ||
+    host.endsWith(".saml-doc.okta.com")
+  ) {
+    return "competitor_docs";
+  }
   if (host === "docs.pingidentity.com" || host.endsWith(".docs.pingidentity.com")) return "competitor_docs";
   if ((host === "learn.microsoft.com" || host.endsWith(".learn.microsoft.com")) && /^\/(?:[a-z]{2}-[a-z]{2}\/)?entra\/identity\/saas-apps(?:\/|$)/i.test(path)) return "competitor_docs";
 
@@ -186,7 +208,14 @@ function deriveVendor(urlStr) {
   try {
     const u = new URL(urlStr);
     const host = u.hostname.toLowerCase();
-    if (host === "help.okta.com" || host.endsWith(".help.okta.com")) return "Okta";
+    if (
+      host === "help.okta.com" ||
+      host.endsWith(".help.okta.com") ||
+      host === "saml-doc.okta.com" ||
+      host.endsWith(".saml-doc.okta.com")
+    ) {
+      return "Okta";
+    }
     if (host === "docs.pingidentity.com" || host.endsWith(".docs.pingidentity.com")) return "Ping Identity";
     if ((host === "learn.microsoft.com" || host.endsWith(".learn.microsoft.com")) && /^\/(?:[a-z]{2}-[a-z]{2}\/)?entra\/identity\/saas-apps(?:\/|$)/i.test(u.pathname.toLowerCase())) return "Entra";
   } catch {

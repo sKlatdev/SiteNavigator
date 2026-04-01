@@ -4,6 +4,8 @@ A **documentation intelligence platform** for competitive gap analysis, content 
 
 **Distributed as a portable Windows executable** — no installation, no external dependencies required. Self-contained .exe for Windows users; full source for developers.
 
+The portable build now bundles a Ketch crawler binary inside the app package. End users still launch one SiteNavigator `.exe`; Ketch runs behind the server sync path and improves crawl performance, extraction quality, redirects, and quality signals without adding a second app to launch.
+
 ---
 
 ## Quick Start
@@ -37,6 +39,12 @@ npm run dev
 # Client runs on http://localhost:4173
 # Server API on http://localhost:8787
 # Keyboard walkthrough: npm run qa:keyboard --prefix client
+```
+
+Local development keeps a legacy crawler fallback if no Ketch binary has been built yet. To exercise the Ketch-backed sync path from source, build the bundled Ketch binary first:
+
+```bash
+npm run build:ketch --prefix server
 ```
 
 ---
@@ -256,7 +264,16 @@ npm run build --prefix client         # Production build → client/dist
 npm run test --prefix server          # Node test runner
 npm run test:coverage:check --prefix server  # Coverage: 90% lines/functions, 85% branches
 npm run build --prefix server         # Prepare client + bundle server → server/build/server.cjs
+npm run build:ketch --prefix server   # Build bundled Ketch binary → server/vendor/ketch/
+npm run build:portable --prefix server # Build bundled Ketch + portable core exe
 ```
+
+**Portable build from repo root:**
+```bash
+npm run build:portable
+```
+
+This now compiles the Ketch binary, packages it into the server assets, builds `dist/sitenavigator-core.exe`, and then wraps that into the final `dist/sitenavigator-win.exe` launcher.
 
 **Full project:**
 ```bash

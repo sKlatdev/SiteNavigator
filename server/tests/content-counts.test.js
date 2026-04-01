@@ -231,6 +231,133 @@ test("/api/content derives release_notes category from docs release notes pages"
   }
 });
 
+test("/api/content derives Okta vendor for saml-doc host pages", async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sitenavigator-server-test-"));
+  const dataDir = path.join(tmpRoot, "data");
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  const now = new Date().toISOString();
+  const seed = {
+    meta: { createdAt: now, updatedAt: now, schemaVersion: 2 },
+    syncRuns: [],
+    fetchCache: {},
+    content: [
+      {
+        id: "okta_saml_doc",
+        url: "https://saml-doc.okta.com/SAML_Docs/How-to-Configure-SAML-2.0-for-Cisco-ASA-VPN.html",
+        title: "How to Configure SAML 2.0 for Cisco ASA VPN",
+        summary: "Okta SAML configuration for Cisco ASA VPN.",
+        category: "competitor_docs",
+        pathSummary: "saml-doc.okta.com/SAML_Docs/How-to-Configure-SAML-2.0-for-Cisco-ASA-VPN.html",
+        pageLastUpdated: now.slice(0, 10),
+        contentHash: "okta1",
+        firstSeenAt: now,
+        updatedAt: now,
+        active: true,
+      },
+    ],
+  };
+
+  fs.writeFileSync(path.join(dataDir, "index.json"), JSON.stringify(seed, null, 2), "utf8");
+
+  const port = 9800 + Math.floor(Math.random() * 200);
+  const child = spawn(process.execPath, ["src/server.js"], {
+    cwd: serverRoot,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      SITENAVIGATOR_DATA_DIR: dataDir,
+      CONTENT_CACHE_MAX_AGE: "0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  try {
+    await waitForServerReady(child);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/content?recentDays=14`);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.items.length, 1);
+    assert.equal(body.items[0].vendor, "Okta");
+    assert.ok(Array.isArray(body.items[0].tags));
+    assert.equal(body.items[0].tags.includes("Okta"), true);
+  } finally {
+    child.kill("SIGTERM");
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("/api/content excludes non-English locale pages", async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sitenavigator-server-test-"));
+  const dataDir = path.join(tmpRoot, "data");
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  const now = new Date().toISOString();
+  const seed = {
+    meta: { createdAt: now, updatedAt: now, schemaVersion: 2 },
+    syncRuns: [],
+    fetchCache: {},
+    content: [
+      {
+        id: "okta_jp",
+        url: "https://help.okta.com/oie/ja-jp/content/topics/apps/example.htm",
+        title: "Japanese Okta page",
+        summary: "ja-jp",
+        category: "competitor_docs",
+        pathSummary: "help.okta.com/oie/ja-jp/content",
+        pageLastUpdated: now.slice(0, 10),
+        contentHash: "jp1",
+        firstSeenAt: now,
+        updatedAt: now,
+        active: true,
+      },
+      {
+        id: "okta_en",
+        url: "https://help.okta.com/oie/en-us/content/topics/apps/example.htm",
+        title: "English Okta page",
+        summary: "en-us",
+        category: "competitor_docs",
+        pathSummary: "help.okta.com/oie/en-us/content",
+        pageLastUpdated: now.slice(0, 10),
+        contentHash: "en1",
+        firstSeenAt: now,
+        updatedAt: now,
+        active: true,
+      },
+    ],
+  };
+
+  fs.writeFileSync(path.join(dataDir, "index.json"), JSON.stringify(seed, null, 2), "utf8");
+
+  const port = 9700 + Math.floor(Math.random() * 100);
+  const child = spawn(process.execPath, ["src/server.js"], {
+    cwd: serverRoot,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      SITENAVIGATOR_DATA_DIR: dataDir,
+      CONTENT_CACHE_MAX_AGE: "0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  try {
+    await waitForServerReady(child);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/content?recentDays=14`);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.items.length, 1);
+    assert.equal(body.items[0].url, "https://help.okta.com/oie/en-us/content/topics/apps/example.htm");
+  } finally {
+    child.kill("SIGTERM");
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test("/api/content includes Duo, Okta, Entra, and Ping Identity vendor tags", async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sitenavigator-server-test-"));
   const dataDir = path.join(tmpRoot, "data");

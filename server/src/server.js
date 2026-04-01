@@ -4,10 +4,10 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { runIncrementalSync, getSyncProgress } from "./crawler.js";
+import { runIncrementalSync, getSelectedSyncEngine, getSyncProgress } from "./syncEngine.js";
 import { readStore, writeStore, listActiveContent, getLastSyncRun } from "./store.js";
 import { computeRecentSignals } from "./recency.js";
-import { isSoftRedirectRow } from "./contentQuality.js";
+import { normalizeContentQuality } from "./contentQuality.js";
 import { buildSourceBundle } from "./cloneDuoExtraction.js";
 import { buildCloneDuoDraft } from "./cloneDuoMapping.js";
 import { buildCloneDuoExport } from "./cloneDuoExport.js";
@@ -120,7 +120,14 @@ function deriveVendor(row) {
   try {
     const urlObj = new URL(String(row?.url || ""));
     const host = urlObj.hostname.toLowerCase();
-    if (host === "help.okta.com" || host.endsWith(".help.okta.com")) return "Okta";
+    if (
+      host === "help.okta.com" ||
+      host.endsWith(".help.okta.com") ||
+      host === "saml-doc.okta.com" ||
+      host.endsWith(".saml-doc.okta.com")
+    ) {
+      return "Okta";
+    }
     if (host === "docs.pingidentity.com" || host.endsWith(".docs.pingidentity.com")) return "Ping Identity";
     if ((host === "learn.microsoft.com" || host.endsWith(".learn.microsoft.com")) && /^\/(?:[a-z]{2}-[a-z]{2}\/)?entra\/identity\/saas-apps(?:\/|$)/i.test(urlObj.pathname.toLowerCase())) return "Entra";
   } catch {
@@ -149,6 +156,24 @@ function deriveTags(row, vendor) {
   }
 
   return Array.from(tags);
+}
+
+function findLocaleSegment(pathname) {
+  const segments = String(pathname || "")
+    .toLowerCase()
+    .split("/")
+    .filter(Boolean);
+  return segments.find((segment) => /^[a-z]{2}-[a-z]{2}$/.test(segment)) || "";
+}
+
+function isEnglishContentUrl(rawUrl) {
+  try {
+    const urlObj = new URL(String(rawUrl || ""));
+    const locale = findLocaleSegment(urlObj.pathname);
+    return !locale || locale === "en-us";
+  } catch {
+    return true;
+  }
 }
 
 function isLocalRequest(req) {
@@ -259,6 +284,7 @@ app.get("/api/sync/status", (_req, res) => {
   const store = readStore();
   const lastRun = getLastSyncRun(store);
   res.json({
+    engine: getSelectedSyncEngine(),
     inProgress,
     lastRun: lastRun
       ? {
@@ -272,7 +298,10 @@ app.get("/api/sync/status", (_req, res) => {
 app.get("/api/sync/progress", (_req, res) => {
   res.json({
     ok: true,
-    progress: getSyncProgress()
+    progress: {
+      ...getSyncProgress(),
+      engine: getSelectedSyncEngine(),
+    }
   });
 });
 
@@ -299,7 +328,9 @@ app.get("/api/content", (req, res) => {
   const q = String(req.query.q || "").trim().toLowerCase();
   const category = String(req.query.category || "").trim().toLowerCase();
   const store = readStore();
-  let rows = listActiveContent(store).filter((row) => !isSoftRedirectRow(row));
+  let rows = listActiveContent(store).filter(
+    (row) => normalizeContentQuality(row).indexable !== false && isEnglishContentUrl(row?.url)
+  );
 
   if (q) {
     rows = rows.filter((r) =>
@@ -333,6 +364,7 @@ app.get("/api/content", (req, res) => {
     const recent = computeRecentSignals(r, recentDays, nowTs);
     const vendor = deriveVendor(r);
     const tags = deriveTags(r, vendor);
+    const quality = normalizeContentQuality(r);
 
     return {
       id: r.id,
@@ -348,7 +380,8 @@ app.get("/api/content", (req, res) => {
       firstSeenAt: r.firstSeenAt,
       updatedAt: r.updatedAt,
       recentlyUpdated: recent.recentlyUpdated,
-      recentReason: recent.recentReason
+      recentReason: recent.recentReason,
+      quality,
     };
   });
 

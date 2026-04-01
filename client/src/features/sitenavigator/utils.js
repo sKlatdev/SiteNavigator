@@ -1,4 +1,4 @@
-import { MODULE_TYPES } from "./constants";
+import { MODULE_TYPES } from "./constants.js";
 
 export const isArray = Array.isArray;
 export const nowIso = () => new Date().toISOString();
@@ -80,9 +80,65 @@ export function toTemplateItemFromContent(content, sourceType = "catalog") {
   };
 }
 
+export function normalizeQualityMetadata(rawQuality) {
+  return rawQuality && typeof rawQuality === "object"
+    ? {
+        indexable: rawQuality.indexable !== false,
+        contentType: String(rawQuality.contentType || rawQuality.content_type || "article") || "article",
+        navigationHeavy: Boolean(rawQuality.navigationHeavy ?? rawQuality.navigation_heavy),
+        redirectTarget: String(rawQuality.redirectTarget || rawQuality.redirect_target || ""),
+      }
+    : {
+        indexable: true,
+        contentType: "article",
+        navigationHeavy: false,
+        redirectTarget: "",
+      };
+}
+
+export function getQualityPresentation(rawQuality) {
+  const quality = normalizeQualityMetadata(rawQuality);
+  const isSoftRedirect = quality.contentType === "soft_redirect" || quality.indexable === false;
+  const isHub = quality.contentType === "hub";
+
+  if (isSoftRedirect) {
+    return {
+      quality,
+      label: "Soft redirect",
+      tone: "amber",
+      helper:
+        quality.redirectTarget
+          ? "Redirect-style page; follow the canonical target for substantive content."
+          : "Redirect-style or placeholder page with low standalone value.",
+      badges: [{ key: "soft_redirect", label: "Soft redirect", tone: "amber" }],
+      redirectTarget: quality.redirectTarget,
+    };
+  }
+
+  if (isHub || quality.navigationHeavy) {
+    return {
+      quality,
+      label: "Hub page",
+      tone: "sky",
+      helper: "Navigation-heavy overview page; useful for discovery, weaker as a direct match.",
+      badges: [{ key: "hub", label: "Hub page", tone: "sky" }],
+      redirectTarget: quality.redirectTarget,
+    };
+  }
+
+  return {
+    quality,
+    label: "Article",
+    tone: "emerald",
+    helper: "Article-quality content; preferred for direct topic coverage and comparison.",
+    badges: [{ key: "article", label: "Article", tone: "emerald" }],
+    redirectTarget: quality.redirectTarget,
+  };
+}
+
 export function mapIndexedToCatalogItem(item) {
   const rawUrl = String(item.url || "");
-  const isOkta = rawUrl.includes("help.okta.com");
+  const isOkta = /https?:\/\/(?:[^/]*\.)?(?:help|saml-doc)\.okta\.com\//i.test(rawUrl);
   const isPing = rawUrl.includes("docs.pingidentity.com");
   const isEntra = /learn\.microsoft\.com\/(?:[a-z]{2}-[a-z]{2}\/)?entra\/identity\/saas-apps/i.test(rawUrl);
   const vendor = item.vendor || (isOkta ? "Okta" : isPing ? "Ping Identity" : isEntra ? "Entra" : "Duo");
@@ -100,6 +156,7 @@ export function mapIndexedToCatalogItem(item) {
   }
 
   const tags = Array.from(new Set([...baseTags, vendor, ...derivedTags, item.category || "other"]));
+  const quality = normalizeQualityMetadata(item?.quality);
 
   return {
     id: item.id,
@@ -116,6 +173,7 @@ export function mapIndexedToCatalogItem(item) {
     author: vendor,
     vendor,
     tags,
+    quality,
   };
 }
 

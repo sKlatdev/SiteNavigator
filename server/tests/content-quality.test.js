@@ -3,7 +3,7 @@ import test from "node:test";
 
 import * as cheerio from "cheerio";
 
-import { detectSoftRedirectPage, isSoftRedirectRow } from "../src/contentQuality.js";
+import { detectSoftRedirectPage, isSoftRedirectRow, normalizeContentQuality } from "../src/contentQuality.js";
 
 test("detectSoftRedirectPage recognizes Ping-style relocation notices", () => {
   const html = `
@@ -42,4 +42,28 @@ test("isSoftRedirectRow only flags stored redirect notice rows", () => {
     }),
     false
   );
+});
+
+test("normalizeContentQuality defaults legacy rows to indexable articles", () => {
+  assert.deepEqual(normalizeContentQuality({ title: "Guide", summary: "Useful content" }), {
+    indexable: true,
+    contentType: "article",
+    navigationHeavy: false,
+    redirectTarget: "",
+  });
+});
+
+test("normalizeContentQuality preserves explicit quality metadata", () => {
+  assert.deepEqual(normalizeContentQuality({
+    quality: {
+      indexable: true,
+      contentType: "hub",
+      navigationHeavy: true,
+    },
+  }), {
+    indexable: true,
+    contentType: "hub",
+    navigationHeavy: true,
+    redirectTarget: "",
+  });
 });

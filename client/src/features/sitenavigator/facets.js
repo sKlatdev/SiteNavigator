@@ -79,6 +79,21 @@ export function createPresetFacetTagDefinitions(searchFacetTerms, matchers) {
       label: "Competitor Docs",
       predicate: (item) => String(item?.category || "") === "competitor_docs",
     },
+    {
+      id: "hub_pages",
+      label: "Hub Pages",
+      predicate: (item) => Boolean(item?.quality?.navigationHeavy) || String(item?.quality?.contentType || "") === "hub",
+    },
+    {
+      id: "article_pages",
+      label: "Article Pages",
+      predicate: (item) => String(item?.quality?.contentType || "article") === "article" && item?.quality?.indexable !== false,
+    },
+    {
+      id: "soft_redirects",
+      label: "Soft Redirects",
+      predicate: (item) => String(item?.quality?.contentType || "") === "soft_redirect" || item?.quality?.indexable === false,
+    },
   ];
 
   const searchTags = searchFacetTerms.map((term) => ({

@@ -83,6 +83,8 @@ function getLastSyncRun(store) {
 }
 
 export {
+  dataDir,
+  dbPath,
   nowIso,
   readStore,
   writeStore,
