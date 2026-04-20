@@ -15,6 +15,7 @@ import {
   upsertContent,
   writeStore,
 } from "./store.js";
+import { analyzeAfterSync } from "./gitNexusIndexer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -502,6 +503,11 @@ export async function runKetchIncrementalSync() {
     message: failed ? failureMessage : "Ketch sync completed",
   });
   writeStore(store);
+
+  // Trigger GitNexus indexing in background — does not block sync response
+  if (!failed) {
+    analyzeAfterSync(gitNexusDocsDir).catch(() => {});
+  }
 
   Object.assign(syncProgress, {
     inProgress: false,

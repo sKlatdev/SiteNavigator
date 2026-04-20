@@ -12,6 +12,9 @@ import { buildSourceBundle } from "./cloneDuoExtraction.js";
 import { buildCloneDuoDraft } from "./cloneDuoMapping.js";
 import { buildCloneDuoExport } from "./cloneDuoExport.js";
 import { deleteCloneDuoDraft, getCloneDuoDraft, saveCloneDuoDraft } from "./cloneDuoDraftStore.js";
+import { graphQueryClient } from "./graphQueryClient.js";
+import { analyzeAfterSync, getIndexProgress, isIndexed } from "./gitNexusIndexer.js";
+import { gitNexusDocsDir } from "./ketchSync.js";
 
 const app = express();
 const cliPortArg = (() => {
@@ -73,6 +76,9 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+// Start GitNexus MCP client (non-blocking — degrades if gitnexus not on PATH)
+graphQueryClient.start().catch(() => {});
 
 let inProgress = false;
 
@@ -278,6 +284,14 @@ function importIndexPayload(mode, payload) {
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "sitenavigator-server-node25" });
+});
+
+app.get("/api/graph/status", (_req, res) => {
+  res.json({
+    available: graphQueryClient.isAvailable(),
+    indexed: isIndexed(gitNexusDocsDir),
+    progress: getIndexProgress(),
+  });
 });
 
 app.get("/api/sync/status", (_req, res) => {
