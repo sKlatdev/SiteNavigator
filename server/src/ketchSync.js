@@ -24,6 +24,7 @@ const bundledKetchAssetPath = path.resolve(__dirname, "..", "vendor", "ketch", b
 const runtimeKetchDir = path.join(dataDir, "runtime");
 const runtimeKetchPath = path.join(runtimeKetchDir, bundledExeName);
 const ketchPortableRoot = path.join(dataDir, "ketch-runtime");
+export const gitNexusDocsDir = path.join(dataDir, "gitnexus-docs");
 const ketchDepth = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_DEPTH || 3));
 const ketchConcurrency = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_CONCURRENCY || 8));
 
@@ -348,6 +349,10 @@ async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
     String(ketchDepth),
     "--concurrency",
     String(ketchConcurrency),
+    "--output-dir",
+    gitNexusDocsDir,
+    "--vendor",
+    vendorRun.id,
   ];
 
   const child = spawn(ketchBin, args, {
