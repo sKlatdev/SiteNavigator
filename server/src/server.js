@@ -294,6 +294,50 @@ app.get("/api/graph/status", (_req, res) => {
   });
 });
 
+// POST /api/compare/related
+// Body: { seedUrl: string, vendors?: string[], boostTerms?: string[], limit?: number }
+// Returns: array matching shape of findRelatedCompareItems output
+app.post("/api/compare/related", async (req, res) => {
+  const seedUrl = String(req.body?.seedUrl || "").trim();
+  const limit = Math.min(20, Math.max(1, Number(req.body?.limit || 6)));
+  const boostTerms = Array.isArray(req.body?.boostTerms) ? req.body.boostTerms : [];
+
+  if (!seedUrl) {
+    return res.status(400).json({ ok: false, message: "seedUrl required" });
+  }
+
+  if (!graphQueryClient.isAvailable()) {
+    return res.status(503).json({ ok: false, message: "search index unavailable", fallback: true });
+  }
+
+  try {
+    const query = [seedUrl, ...boostTerms].join(" ");
+    const raw = await graphQueryClient.search(query, { limit: limit * 3 });
+
+    // Filter out the seed itself and map to the shape App.jsx expects
+    const results = raw
+      .filter((item) => item.url !== seedUrl)
+      .slice(0, limit)
+      .map((item) => ({
+        id: item.id || `gn_${Buffer.from(item.url || "").toString("base64").slice(0, 12)}`,
+        url: item.url || "",
+        title: item.title || "",
+        vendor: item.vendor || "",
+        category: item.category || "competitor_docs",
+        summary: item.excerpt || item.summary || "",
+        relationScore: Number(item.score || 0),
+        relationConfidence: Number(item.score || 0) >= 0.8 ? "high" : Number(item.score || 0) >= 0.5 ? "medium" : "low",
+        matchedTokens: Array.isArray(item.matchedTokens) ? item.matchedTokens : [],
+        boostedTokens: [],
+        quality: { indexable: true, navigationHeavy: false, contentType: "article", redirectTarget: "" },
+      }));
+
+    res.json({ ok: true, results });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
 app.get("/api/sync/status", (_req, res) => {
   const store = readStore();
   const lastRun = getLastSyncRun(store);
