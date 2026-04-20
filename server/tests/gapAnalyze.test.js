@@ -2,131 +2,96 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import express from "express";
 import { createServer } from "node:http";
+import { createGapAnalyzeHandler } from "../src/server.js";
 
-describe("POST /api/gap/analyze", () => {
-  it("returns fallback:true when graphQueryClient is unavailable", async () => {
+describe("POST /api/gap/analyze — createGapAnalyzeHandler", () => {
+  function buildApp(mockClient) {
     const app = express();
     app.use(express.json());
-    const mockClient = { isAvailable: () => false, search: async () => [] };
+    app.post("/api/gap/analyze", createGapAnalyzeHandler(mockClient));
+    return app;
+  }
 
-    app.post("/api/gap/analyze", async (req, res) => {
-      if (!mockClient.isAvailable()) {
-        if (process.env.DEBUG_GITNEXUS) {
-          console.debug(`[gap/analyze] fallback: GitNexus unavailable. items=${(req.body?.competitorItems || []).length}`);
-        }
-        return res.status(503).json({ ok: false, fallback: true, message: "GitNexus unavailable" });
-      }
-    });
-
+  async function post(app, body) {
     const server = createServer(app);
     await new Promise((r) => server.listen(0, r));
     const port = server.address().port;
-
     const response = await fetch(`http://localhost:${port}/api/gap/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitorItems: [{ id: "1", title: "SAML SSO", summary: "Single sign-on", vendor: "Okta", url: "https://okta.com/saml" }], limit: 3 }),
+      body: JSON.stringify(body),
     });
     const data = await response.json();
+    await new Promise((r) => server.close(r));
+    return { response, data };
+  }
 
+  it("returns 503 fallback:true when graphQueryClient is unavailable", async () => {
+    const { response, data } = await post(
+      buildApp({ isAvailable: () => false, search: async () => [] }),
+      { competitorItems: [{ id: "1", title: "SAML SSO", summary: "Single sign-on", vendor: "Okta", url: "https://okta.com/saml" }] }
+    );
     assert.equal(response.status, 503);
     assert.equal(data.ok, false);
     assert.equal(data.fallback, true);
     assert.ok(data.message.includes("unavailable"));
-
-    await new Promise((r) => server.close(r));
   });
 
-  it("returns findings array with correct shape when client is available", async () => {
-    const app = express();
-    app.use(express.json());
-
+  it("returns { ok: true, findings } with correct shape and exact severity", async () => {
     const mockClient = {
       isAvailable: () => true,
-      search: async () => [
-        { id: "duo_1", title: "Duo SSO Guide", url: "https://duo.com/sso", vendor: "Duo", score: 0.82, excerpt: "Configure SSO" },
-      ],
+      search: async () => [{ id: "duo_1", title: "Duo SSO Guide", url: "https://duo.com/sso", vendor: "Duo", score: 0.82 }],
     };
-
-    app.post("/api/gap/analyze", async (req, res) => {
-      if (!mockClient.isAvailable()) {
-        return res.status(503).json({ ok: false, fallback: true, message: "GitNexus unavailable" });
-      }
-      const competitorItems = Array.isArray(req.body?.competitorItems) ? req.body.competitorItems : [];
-      const limit = Math.min(10, Math.max(1, Number(req.body?.limit || 3)));
-
-      try {
-        const findings = await Promise.all(
-          competitorItems.map(async (item) => {
-            const query = `${item.title || ""} ${item.summary || ""}`.trim();
-            const hits = await mockClient.search(query, { limit });
-            const relatedDuo = hits[0] || null;
-            const relationScore = relatedDuo ? Number(relatedDuo.score || 0) : 0;
-            const recencyScore = item.recencyScore || 0;
-            const evidenceCount = item.evidenceCount || 0;
-            const spreadScore = Math.min(4, evidenceCount);
-            const severityScore = spreadScore + recencyScore + Math.max(0, 6 - relationScore);
-            const severity = severityScore >= 9 ? "high" : severityScore >= 6 ? "medium" : "low";
-            const gapType = item.gapType || "feature_gap";
-            const whyFlagged = relatedDuo
-              ? `Weak Duo alignment (${relationScore.toFixed(2)}). Best match: '${relatedDuo.title}'.`
-              : `No Duo counterpart found. evidence vendors: ${evidenceCount}.`;
-
-            return {
-              id: `gap_${item.id}`,
-              title: `${item.vendor || "Competitor"} ${(item.title || "").split(" ").slice(0, 6).join(" ")}`,
-              summary: relatedDuo
-                ? `Potential ${gapType.replace("_", " ")} gap. Closest Duo topic: '${relatedDuo.title}'.`
-                : `Likely ${gapType.replace("_", " ")} gap with no reliable Duo equivalent.`,
-              vendor: item.vendor || "",
-              url: item.url || "",
-              relatedDuoTitle: relatedDuo?.title || "",
-              relationScore,
-              severity,
-              severityScore,
-              gapType,
-              whyFlagged,
-              evidenceCount,
-              feedbackState: item.feedbackState || "none",
-              tags: [
-                ...(Array.isArray(item.tags) ? item.tags : []),
-                !relatedDuo ? "strong_gap" : "partial_gap",
-                `gap_${gapType}`,
-                `severity_${severity}`,
-              ],
-            };
-          })
-        );
-        res.json({ ok: true, findings });
-      } catch (err) {
-        res.status(500).json({ ok: false, message: err.message });
-      }
+    // evidenceCount=2, recencyScore=1, relationScore=0.82
+    // severityScore = min(4,2) + 1 + max(0, 6-0.82) = 2 + 1 + 5.18 = 8.18 → "medium"
+    const { data } = await post(buildApp(mockClient), {
+      competitorItems: [{ id: "okta_1", title: "SAML SSO", summary: "single sign-on", vendor: "Okta", url: "https://okta.com/saml", evidenceCount: 2, recencyScore: 1, gapType: "feature_gap" }],
+      limit: 3,
     });
-
-    const server = createServer(app);
-    await new Promise((r) => server.listen(0, r));
-    const port = server.address().port;
-
-    const response = await fetch(`http://localhost:${port}/api/gap/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        competitorItems: [{ id: "okta_1", title: "SAML SSO", summary: "single sign-on", vendor: "Okta", url: "https://okta.com/saml", evidenceCount: 2, recencyScore: 1, gapType: "feature_gap" }],
-        limit: 3,
-      }),
-    });
-    const data = await response.json();
 
     assert.equal(data.ok, true);
     assert.ok(Array.isArray(data.findings));
     assert.equal(data.findings.length, 1);
     const f = data.findings[0];
     assert.equal(f.id, "gap_okta_1");
-    assert.ok(["high", "medium", "low"].includes(f.severity), `unexpected severity: ${f.severity}`);
-    assert.ok(typeof f.severityScore === "number");
-    assert.ok(typeof f.relatedDuoTitle === "string");
+    assert.equal(f.severity, "medium");
+    assert.ok(Math.abs(f.severityScore - 8.18) < 0.01, `unexpected severityScore: ${f.severityScore}`);
+    assert.equal(f.relatedDuoTitle, "Duo SSO Guide");
     assert.ok(Array.isArray(f.tags));
+    assert.ok(f.tags.includes("partial_gap"));
+    assert.ok(f.tags.includes("gap_feature_gap"));
+    assert.ok(f.tags.includes("severity_medium"));
+    assert.ok(f.whyFlagged.includes("0.82"));
+    assert.ok(!f.whyFlagged.startsWith("Weak"), `whyFlagged should not hardcode 'Weak': ${f.whyFlagged}`);
+  });
 
-    await new Promise((r) => server.close(r));
+  it("returns empty findings array for empty competitorItems", async () => {
+    const { data } = await post(
+      buildApp({ isAvailable: () => true, search: async () => [] }),
+      { competitorItems: [] }
+    );
+    assert.equal(data.ok, true);
+    assert.deepEqual(data.findings, []);
+  });
+
+  it("falls back to gap_<url> id when item.id is missing", async () => {
+    const mockClient = { isAvailable: () => true, search: async () => [] };
+    const { data } = await post(buildApp(mockClient), {
+      competitorItems: [{ title: "No ID item", summary: "test", vendor: "Okta", url: "https://okta.com/page" }],
+    });
+    assert.equal(data.ok, true);
+    assert.ok(data.findings[0].id !== "gap_undefined", `id should not be 'gap_undefined': ${data.findings[0].id}`);
+  });
+
+  it("returns 500 when search throws", async () => {
+    const mockClient = {
+      isAvailable: () => true,
+      search: async () => { throw new Error("search failed"); },
+    };
+    const { response, data } = await post(buildApp(mockClient), {
+      competitorItems: [{ id: "x", title: "T", summary: "S", vendor: "V", url: "https://v.com" }],
+    });
+    assert.equal(response.status, 500);
+    assert.equal(data.ok, false);
   });
 });
