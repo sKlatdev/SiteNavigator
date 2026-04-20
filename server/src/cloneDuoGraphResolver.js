@@ -8,8 +8,9 @@ const SEARCH_TIMEOUT_MS = 5_000;
 // resolveAmbiguityWithGraph: for each candidate value, queries GitNexus and picks
 // the value most corroborated by indexed docs.
 // Returns { resolvedValue, confidence, evidenceUrls } or null if unavailable/uncertain.
-export async function resolveAmbiguityWithGraph(field, candidateValues, context) {
-  if (!graphQueryClient.isAvailable()) {
+export async function resolveAmbiguityWithGraph(field, candidateValues, context, _client) {
+  const client = _client ?? graphQueryClient;
+  if (!client.isAvailable()) {
     if (process.env.DEBUG_GITNEXUS) {
       console.debug(`[cloneDuoGraphResolver] unavailable — skipping disambiguation for field ${context?.fieldId}`);
     }
@@ -21,7 +22,8 @@ export async function resolveAmbiguityWithGraph(field, candidateValues, context)
       candidateValues.map(async (value) => {
         const hits = await searchWithTimeout(
           `${value} ${field.label}`,
-          { limit: SEARCH_LIMIT }
+          { limit: SEARCH_LIMIT },
+          client
         );
         const score = hits.reduce((sum, h) => sum + Number(h.score || 0), 0);
         return {
@@ -67,9 +69,9 @@ export async function resolveAmbiguityWithGraph(field, candidateValues, context)
   }
 }
 
-async function searchWithTimeout(query, opts) {
+async function searchWithTimeout(query, opts, client) {
   return Promise.race([
-    graphQueryClient.search(query, opts),
+    client.search(query, opts),
     new Promise((_, reject) =>
       setTimeout(() => reject(new Error("search timeout")), SEARCH_TIMEOUT_MS)
     ),
