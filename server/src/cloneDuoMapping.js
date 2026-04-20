@@ -11,6 +11,7 @@ import {
   nowIso,
 } from "./cloneDuoSchemas.js";
 import { enhanceCloneDuoDraft } from "./cloneDuoGeneration.js";
+import { resolveAmbiguityWithGraph } from "./cloneDuoGraphResolver.js";
 
 const URL_PATTERN = /https?:\/\/[^\s)]+/gi;
 
@@ -21,7 +22,7 @@ export async function buildCloneDuoDraft({ sourceItems = [], sourceBundle, bluep
   const fieldDefinitions = getRequiredFields(resolvedBlueprintFamily);
   const evidence = Array.isArray(sourceBundle?.evidence) ? sourceBundle.evidence : [];
 
-  const fieldStates = fieldDefinitions.map((field) => resolveFieldState(field, evidence));
+  const fieldStates = await Promise.all(fieldDefinitions.map((field) => resolveFieldState(field, evidence)));
   const screenshotAttachments = mapScreenshotAttachments(sections, evidence);
   const sectionDrafts = sections.map((section) => buildSectionDraft(section, fieldStates, evidence, screenshotAttachments, sourceBundle));
   const issues = buildTransformIssues(fieldStates, sectionDrafts, screenshotAttachments);
@@ -46,7 +47,7 @@ export async function buildCloneDuoDraft({ sourceItems = [], sourceBundle, bluep
   return enhanceCloneDuoDraft(baseDraft);
 }
 
-function resolveFieldState(field, evidence) {
+async function resolveFieldState(field, evidence) {
   const state = createFieldState(field);
   const candidates = collectCandidates(field, evidence);
 
@@ -69,6 +70,16 @@ function resolveFieldState(field, evidence) {
       reviewerEnteredValue: "",
       reviewerDecisionState: REVIEW_DECISION_STATE.PENDING,
     };
+    // Attempt GitNexus-powered disambiguation before returning UNRESOLVED_AMBIGUOUS
+    const graphResult = await resolveAmbiguityWithGraph(field, uniqueValues, { fieldId: field.id });
+    if (graphResult) {
+      state.status = FIELD_STATUS.RESOLVED;
+      state.value = graphResult.resolvedValue;
+      state.resolvedBy = "graph";
+      state.graphConfidence = graphResult.confidence;
+      state.graphEvidenceUrls = graphResult.evidenceUrls;
+      state.unresolved = undefined;
+    }
     return state;
   }
 
