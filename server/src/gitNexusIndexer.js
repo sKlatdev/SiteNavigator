@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -34,7 +34,7 @@ export async function analyzeAfterSync(docsDir) {
   const args = ["analyze", docsDir, "--name", "sitenavigator-docs", "--skip-git"];
 
   return new Promise((resolve) => {
-    const proc = exec(`"${gitnexusBin}" ${args.map((a) => `"${a}"`).join(" ")}`);
+    const proc = execFile(gitnexusBin, args);
 
     proc.on("error", (err) => {
       Object.assign(indexProgress, {
