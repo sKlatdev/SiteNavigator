@@ -89,6 +89,7 @@ import {
   buildRelatedMatchDiagnostics,
   buildRelatedVendorBuckets,
   changedWeight,
+  fetchRelatedItems,
   findRelatedCompareItems,
   relationConfidence,
   relationScore,
@@ -4736,13 +4737,13 @@ export default function App() {
 
     setToolLoadState((prev) => ({ ...prev, compare: { loading: true, progress: 0 } }));
 
-    const step = (startIndex) => {
+    const step = async (startIndex) => {
       if (cancelled) return;
       const slice = seedIds.slice(startIndex, startIndex + chunkSize);
-      slice.forEach((seedId, offset) => {
+      await Promise.all(slice.map(async (seedId, offset) => {
         const seed = byId.get(seedId);
         if (!seed) return;
-        const relatedRaw = findRelatedCompareItems(seed, catalog, 6, { vendorPriority, boostTerms });
+        const relatedRaw = await fetchRelatedItems(seed, catalog, 6, { vendorPriority, boostTerms });
         const pinnedIds = new Set(Array.isArray(pinnedBySeed[seed.id]) ? pinnedBySeed[seed.id] : []);
         const related = relatedRaw
           .map((item) => ({ ...item, pinned: pinnedIds.has(item.id) }))
@@ -4766,7 +4767,7 @@ export default function App() {
           seedUrl: seed.url,
           related,
         });
-      });
+      }));
 
       const nextIndex = startIndex + chunkSize;
       const progress = seedIds.length ? Math.round((Math.min(nextIndex, seedIds.length) / seedIds.length) * 100) : 100;
@@ -4774,13 +4775,13 @@ export default function App() {
       setToolLoadState((prev) => ({ ...prev, compare: { loading: nextIndex < seedIds.length, progress } }));
 
       if (nextIndex < seedIds.length) {
-        setTimeout(() => step(nextIndex), 0);
+        await step(nextIndex);
       } else {
         setToolComputedAt((prev) => ({ ...prev, compare: Date.now() }));
       }
     };
 
-    step(0);
+    step(0).catch(() => {});
     return () => {
       cancelled = true;
     };
