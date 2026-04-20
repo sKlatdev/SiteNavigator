@@ -31,3 +31,8 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 .vscode/*.code-workspace
+node_modules/
+*.log
+.claude/.simplify-ignore-cache/
+
+.worktrees/
