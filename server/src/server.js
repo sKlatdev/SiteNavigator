@@ -338,6 +338,70 @@ app.post("/api/compare/related", async (req, res) => {
   }
 });
 
+// POST /api/gap/analyze
+// Body: { competitorItems: Item[], limit?: number }
+// Each item: { id, title, summary, vendor, url, evidenceCount?, recencyScore?, gapType?, feedbackState?, tags? }
+// Returns: { ok: true, findings: GapFinding[] } or { ok: false, fallback: true } when GitNexus unavailable
+app.post("/api/gap/analyze", async (req, res) => {
+  if (!graphQueryClient.isAvailable()) {
+    if (process.env.DEBUG_GITNEXUS) {
+      console.debug(`[gap/analyze] fallback: GitNexus unavailable. items=${(req.body?.competitorItems || []).length}`);
+    }
+    return res.status(503).json({ ok: false, fallback: true, message: "GitNexus unavailable" });
+  }
+
+  const competitorItems = Array.isArray(req.body?.competitorItems) ? req.body.competitorItems : [];
+  const limit = Math.min(10, Math.max(1, Number(req.body?.limit || 3)));
+
+  try {
+    const findings = await Promise.all(
+      competitorItems.map(async (item) => {
+        const query = `${item.title || ""} ${item.summary || ""}`.trim();
+        const hits = await graphQueryClient.search(query, { limit });
+        const relatedDuo = hits[0] || null;
+        const relationScore = relatedDuo ? Number(relatedDuo.score || 0) : 0;
+        const recencyScore = Number(item.recencyScore || 0);
+        const evidenceCount = Number(item.evidenceCount || 0);
+        const spreadScore = Math.min(4, evidenceCount);
+        const severityScore = spreadScore + recencyScore + Math.max(0, 6 - relationScore);
+        const severity = severityScore >= 9 ? "high" : severityScore >= 6 ? "medium" : "low";
+        const gapType = String(item.gapType || "feature_gap");
+        const whyFlagged = relatedDuo
+          ? `Weak Duo alignment (${relationScore.toFixed(2)}). Best match: '${relatedDuo.title}'.`
+          : `No Duo counterpart found. evidence vendors: ${evidenceCount}.`;
+
+        return {
+          id: `gap_${item.id}`,
+          title: `${item.vendor || "Competitor"} ${(item.title || "").split(" ").slice(0, 6).join(" ")}`,
+          summary: relatedDuo
+            ? `Potential ${gapType.replace("_", " ")} gap. Closest Duo topic: '${relatedDuo.title}'.`
+            : `Likely ${gapType.replace("_", " ")} gap with no reliable Duo equivalent.`,
+          vendor: item.vendor || "",
+          url: item.url || "",
+          relatedDuoTitle: relatedDuo?.title || "",
+          relationScore,
+          severity,
+          severityScore,
+          gapType,
+          whyFlagged,
+          evidenceCount,
+          feedbackState: String(item.feedbackState || "none"),
+          tags: [
+            ...(Array.isArray(item.tags) ? item.tags : []),
+            !relatedDuo ? "strong_gap" : "partial_gap",
+            `gap_${gapType}`,
+            `severity_${severity}`,
+          ],
+        };
+      })
+    );
+
+    res.json({ ok: true, findings });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
 app.get("/api/sync/status", (_req, res) => {
   const store = readStore();
   const lastRun = getLastSyncRun(store);
