@@ -96,6 +96,7 @@ import {
   summarizeTopicTitle,
   tokenizeRelationText,
 } from "./features/sitenavigator/compareMatching";
+import { fetchGapItems } from "./features/sitenavigator/gapAnalysis";
 import { CloneDuoWorkspace } from "./features/sitenavigator/cloneDuo/CloneDuoWorkspace";
 
 /** =========================================================
@@ -4829,80 +4830,97 @@ export default function App() {
 
     setToolLoadState((prev) => ({ ...prev, gap: { loading: true, progress: 0 } }));
 
-    const step = (startIndex) => {
+    const step = async (startIndex) => {
       if (cancelled) return;
       const slice = competitorItems.slice(startIndex, startIndex + chunkSize);
 
-      slice.forEach((item) => {
-        const seedTokens = tokenizeRelationText([item.title, item.summary, item.pathSummary].join(" ")).slice(0, 18);
-        const candidateIds = new Set();
-        seedTokens.forEach((token) => {
-          const ids = duoTokenIndex.get(token);
-          if (!ids) return;
-          ids.forEach((id) => candidateIds.add(id));
+      // Annotate items with precomputed scores so server can compute severity
+      const annotated = slice.map((item) => ({
+        ...item,
+        evidenceCount: topicVendorSpread.get(toTopicKey(item))?.size || 0,
+        recencyScore: changedWeight(item),
+        gapType: gapTypeForItem(item),
+        feedbackState: feedbackSnapshot[`gap_${item.id}`] || "none",
+      }));
+
+      const serverFindings = await fetchGapItems(annotated);
+
+      if (serverFindings !== null) {
+        // Server returned semantic gap findings — push directly
+        serverFindings.forEach((finding) => built.push(finding));
+      } else {
+        // Inline fallback: same token-matcher logic as before
+        slice.forEach((item) => {
+          const seedTokens = tokenizeRelationText([item.title, item.summary, item.pathSummary].join(" ")).slice(0, 18);
+          const candidateIds = new Set();
+          seedTokens.forEach((token) => {
+            const ids = duoTokenIndex.get(token);
+            if (!ids) return;
+            ids.forEach((id) => candidateIds.add(id));
+          });
+
+          const rankedCandidates = [...candidateIds]
+            .slice(0, 120)
+            .map((id) => duoById.get(id))
+            .filter(Boolean)
+            .map((candidate) => {
+              const scoreMeta = relationScore(item, candidate, { vendorPriority: "duo_first", boostTerms: [] });
+              return {
+                ...candidate,
+                relationScore: scoreMeta.score,
+                relationConfidence: relationConfidence(scoreMeta.score),
+                matchedTokens: scoreMeta.matchedTokens,
+                boostedTokens: scoreMeta.boostedTokens,
+              };
+            })
+            .filter((candidate) => candidate.relationScore > 0);
+
+          const articleCandidates = rankedCandidates.filter((candidate) => !isNavigationHeavyContent(candidate));
+          const relatedCandidates = (articleCandidates.length ? articleCandidates : rankedCandidates)
+            .sort((a, b) => b.relationScore - a.relationScore)
+            .slice(0, 3);
+
+          const relatedDuo = relatedCandidates[0] || null;
+          const topicKey = toTopicKey(item);
+          const evidenceCount = topicVendorSpread.get(topicKey)?.size || 0;
+          const relationConfidenceScore = relatedDuo?.relationScore || 0;
+          const recencyScore = changedWeight(item);
+          const spreadScore = Math.min(4, evidenceCount);
+          const severityScore = spreadScore + recencyScore + Math.max(0, 6 - relationConfidenceScore);
+          const severity = severityScore >= 9 ? "high" : severityScore >= 6 ? "medium" : "low";
+          const isStrongGap = !relatedDuo && evidenceCount >= minimumStrongGapEvidence;
+          const gapType = gapTypeForItem(item);
+          const matched = relatedDuo?.matchedTokens?.slice(0, 4) || [];
+          const missingHint = tokenizeRelationText(item.title).slice(0, 4).filter((token) => !matched.includes(token));
+          const whyFlagged = relatedDuo
+            ? `Weak Duo alignment (${relationConfidenceScore}). matched: ${matched.join(", ") || "none"}; missing: ${missingHint.join(", ") || "none"}.`
+            : `No Duo counterpart above threshold. evidence vendors: ${evidenceCount}. missing: ${missingHint.join(", ") || "none"}.`;
+          const feedbackState = feedbackSnapshot[`gap_${item.id}`] || "none";
+
+          built.push({
+            ...item,
+            id: `gap_${item.id}`,
+            title: `${item.vendor || "Competitor"} ${summarizeTopicTitle(item.title, 6)}`,
+            summary: relatedDuo
+              ? `Potential ${gapType.replace("_", " ")} gap. Closest Duo topic: '${summarizeTopicTitle(relatedDuo.title, 6)}'.`
+              : `Likely ${gapType.replace("_", " ")} gap with no reliable Duo equivalent detected.`,
+            tags: [
+              ...(Array.isArray(item.tags) ? item.tags : []),
+              isStrongGap ? "strong_gap" : "partial_gap",
+              `gap_${gapType}`,
+              `severity_${severity}`,
+            ],
+            relatedScore: relationConfidenceScore,
+            relatedDuoTitle: relatedDuo?.title || "",
+            severity,
+            severityScore,
+            gapType,
+            whyFlagged,
+            evidenceCount,
+            feedbackState,
+          });
         });
-
-        const rankedCandidates = [...candidateIds]
-          .slice(0, 120)
-          .map((id) => duoById.get(id))
-          .filter(Boolean)
-          .map((candidate) => {
-            const scoreMeta = relationScore(item, candidate, { vendorPriority: "duo_first", boostTerms: [] });
-            return {
-              ...candidate,
-              relationScore: scoreMeta.score,
-              relationConfidence: relationConfidence(scoreMeta.score),
-              matchedTokens: scoreMeta.matchedTokens,
-              boostedTokens: scoreMeta.boostedTokens,
-            };
-          })
-          .filter((candidate) => candidate.relationScore > 0);
-
-        const articleCandidates = rankedCandidates.filter((candidate) => !isNavigationHeavyContent(candidate));
-        const relatedCandidates = (articleCandidates.length ? articleCandidates : rankedCandidates)
-          .sort((a, b) => b.relationScore - a.relationScore)
-          .slice(0, 3);
-
-        const relatedDuo = relatedCandidates[0] || null;
-        const topicKey = toTopicKey(item);
-        const evidenceCount = topicVendorSpread.get(topicKey)?.size || 0;
-        const relationConfidenceScore = relatedDuo?.relationScore || 0;
-        const recencyScore = changedWeight(item);
-        const spreadScore = Math.min(4, evidenceCount);
-        const severityScore = spreadScore + recencyScore + Math.max(0, 6 - relationConfidenceScore);
-        const severity = severityScore >= 9 ? "high" : severityScore >= 6 ? "medium" : "low";
-        const isStrongGap = !relatedDuo && evidenceCount >= minimumStrongGapEvidence;
-        const gapType = gapTypeForItem(item);
-        const matched = relatedDuo?.matchedTokens?.slice(0, 4) || [];
-        const missingHint = tokenizeRelationText(item.title).slice(0, 4).filter((token) => !matched.includes(token));
-        const whyFlagged = relatedDuo
-          ? `Weak Duo alignment (${relationConfidenceScore}). matched: ${matched.join(", ") || "none"}; missing: ${missingHint.join(", ") || "none"}.`
-          : `No Duo counterpart above threshold. evidence vendors: ${evidenceCount}. missing: ${missingHint.join(", ") || "none"}.`;
-        const feedbackState = feedbackSnapshot[`gap_${item.id}`] || "none";
-
-        built.push({
-          ...item,
-          id: `gap_${item.id}`,
-          title: `${item.vendor || "Competitor"} ${summarizeTopicTitle(item.title, 6)}`,
-          summary: relatedDuo
-            ? `Potential ${gapType.replace("_", " ")} gap. Closest Duo topic: '${summarizeTopicTitle(relatedDuo.title, 6)}'.`
-            : `Likely ${gapType.replace("_", " ")} gap with no reliable Duo equivalent detected.`,
-          tags: [
-            ...(Array.isArray(item.tags) ? item.tags : []),
-            isStrongGap ? "strong_gap" : "partial_gap",
-            `gap_${gapType}`,
-            `severity_${severity}`,
-          ],
-          relatedScore: relationConfidenceScore,
-          relatedDuoTitle: relatedDuo?.title || "",
-          severity,
-          severityScore,
-          gapType,
-          whyFlagged,
-          evidenceCount,
-          feedbackState,
-        });
-      });
+      }
 
       const nextIndex = startIndex + chunkSize;
       const progress = competitorItems.length
@@ -4918,17 +4936,19 @@ export default function App() {
         })
         .slice(0, 300);
 
-      setSmartGapItems(partial);
-      setToolLoadState((prev) => ({ ...prev, gap: { loading: nextIndex < competitorItems.length, progress } }));
+      if (!cancelled) {
+        setSmartGapItems(partial);
+        setToolLoadState((prev) => ({ ...prev, gap: { loading: nextIndex < competitorItems.length, progress } }));
+      }
 
       if (nextIndex < competitorItems.length) {
-        setTimeout(() => step(nextIndex), 0);
+        await step(nextIndex);
       } else {
-        setToolComputedAt((prev) => ({ ...prev, gap: Date.now() }));
+        if (!cancelled) setToolComputedAt((prev) => ({ ...prev, gap: Date.now() }));
       }
     };
 
-    step(0);
+    step(0).catch(() => {});
     return () => {
       cancelled = true;
     };
