@@ -46,6 +46,7 @@ Ketch crawl → server/data/gitnexus-docs/<vendor>/ → gitnexus analyze → .gi
 | `SITENAVIGATOR_OPEN_BROWSER` | `true` | Set `false` to disable auto browser open on launch |
 | `PORT` | `8787` | Server port |
 | `SITENAVIGATOR_DATA_DIR` | `server/data` | Index storage directory |
+| `SITENAVIGATOR_GRAPH_SEARCH_TIMEOUT_MS` | `5000` | Timeout in ms for `searchWithTimeout` calls to GitNexus graph search |
 
 ## Coding Boundaries
 
