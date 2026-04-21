@@ -1461,8 +1461,8 @@ function SyncStatusPanel({ syncState }) {
           className="sync-bar-shimmer h-full rounded-full"
           style={{
             width: `${percent}%`,
-            background: 'linear-gradient(to right, #3b82f6, #6366f1, #8b5cf6)',
-            backgroundSize: '200% 100%',
+            background: 'linear-gradient(90deg, #3b82f6 0%, #6366f1 45%, #c4b5fd 50%, #6366f1 55%, #8b5cf6 100%)',
+            backgroundSize: '400% 100%',
             boxShadow: isActive ? '0 0 8px 1px rgba(99,102,241,0.5)' : 'none',
             opacity: isActive ? 1 : 0.4,
             transition: 'width 500ms ease-out',
