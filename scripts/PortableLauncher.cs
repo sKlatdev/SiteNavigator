@@ -41,30 +41,7 @@ internal static class Program
             File.WriteAllBytes(coreExePath, payload);
         }
 
-        ProcessStartInfo startInfo = new ProcessStartInfo();
-        startInfo.FileName = coreExePath;
-        startInfo.WorkingDirectory = launcherDir;
-        startInfo.UseShellExecute = false;
-        startInfo.CreateNoWindow = true;
-        startInfo.WindowStyle = ProcessWindowStyle.Hidden;
-
-        string configuredDataDir = Environment.GetEnvironmentVariable("SITENAVIGATOR_DATA_DIR");
-        startInfo.EnvironmentVariables["SITENAVIGATOR_DATA_DIR"] =
-            string.IsNullOrWhiteSpace(configuredDataDir)
-                ? Path.Combine(launcherDir, "data")
-                : configuredDataDir;
-
-        CopyEnvironmentVariable(startInfo, "PORT");
-        CopyEnvironmentVariable(startInfo, "PORT_RETRY_COUNT");
-        CopyEnvironmentVariable(startInfo, "ALLOWED_ORIGINS");
-        CopyEnvironmentVariable(startInfo, "ENABLE_PATH_IMPORT");
-        CopyEnvironmentVariable(startInfo, "ENABLE_INDEX_PATH_IO");
-        CopyEnvironmentVariable(startInfo, "CONTENT_CACHE_MAX_AGE");
-        CopyEnvironmentVariable(startInfo, "SLOW_ROUTE_MS");
-
-        string openBrowser = Environment.GetEnvironmentVariable("SITENAVIGATOR_OPEN_BROWSER");
-        startInfo.EnvironmentVariables["SITENAVIGATOR_OPEN_BROWSER"] =
-            string.IsNullOrWhiteSpace(openBrowser) ? "true" : openBrowser;
+        ProcessStartInfo startInfo = BuildStartInfo(coreExePath, launcherDir);
 
         using (Process child = Process.Start(startInfo))
         {
@@ -88,6 +65,18 @@ internal static class Program
 
     private static Process SpawnChild(string coreExePath, string launcherDir)
     {
+        ProcessStartInfo startInfo = BuildStartInfo(coreExePath, launcherDir);
+
+        Process child = Process.Start(startInfo);
+        if (child == null)
+        {
+            throw new InvalidOperationException("Failed to start packaged runtime.");
+        }
+        return child;
+    }
+
+    private static ProcessStartInfo BuildStartInfo(string coreExePath, string launcherDir)
+    {
         ProcessStartInfo startInfo = new ProcessStartInfo();
         startInfo.FileName = coreExePath;
         startInfo.WorkingDirectory = launcherDir;
@@ -113,16 +102,12 @@ internal static class Program
         startInfo.EnvironmentVariables["SITENAVIGATOR_OPEN_BROWSER"] =
             string.IsNullOrWhiteSpace(openBrowser) ? "true" : openBrowser;
 
-        Process child = Process.Start(startInfo);
-        if (child == null)
-        {
-            throw new InvalidOperationException("Failed to start packaged runtime.");
-        }
-        return child;
+        return startInfo;
     }
 
     private static void KillChild(Process child)
     {
+        if (child == null) return;
         try
         {
             if (!child.HasExited)
