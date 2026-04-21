@@ -12,7 +12,7 @@ import {
 } from "./cloneDuoSchemas.js";
 import { enhanceCloneDuoDraft } from "./cloneDuoGeneration.js";
 import { resolveAmbiguityWithGraph } from "./cloneDuoGraphResolver.js";
-import { graphQueryClient } from "./graphQueryClient.js";
+import { graphQueryClient, searchWithTimeout } from "./graphQueryClient.js";
 
 const URL_PATTERN = /https?:\/\/[^\s)]+/gi;
 
@@ -453,16 +453,6 @@ function formatFieldValue(field) {
   return String(field.value || "");
 }
 
-const GRAPH_SEARCH_TIMEOUT_MS = 5_000;
-
-async function graphSearchWithTimeout(query, opts, client) {
-  return Promise.race([
-    client.search(query, opts),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("graph search timeout")), GRAPH_SEARCH_TIMEOUT_MS)
-    ),
-  ]).catch(() => []);
-}
 
 export async function resolveFieldWithGraph(field, evidence, _client) {
   const client = _client ?? graphQueryClient;
@@ -470,7 +460,7 @@ export async function resolveFieldWithGraph(field, evidence, _client) {
 
   const query = [field.label, ...(field.extractionAliases || [])].join(" ");
   try {
-    const hits = await graphSearchWithTimeout(query, { limit: 3 }, client);
+    const hits = await searchWithTimeout(query, { limit: 3 }, client);
     const threshold = Number(field.confidenceThreshold ?? 0.6);
 
     for (const hit of hits) {
