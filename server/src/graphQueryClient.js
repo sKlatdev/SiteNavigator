@@ -3,6 +3,18 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const gitnexusBin = String(process.env.SITENAVIGATOR_GITNEXUS_BIN || "gitnexus").trim();
 
+const GRAPH_SEARCH_TIMEOUT_MS =
+  Number(process.env.SITENAVIGATOR_GRAPH_SEARCH_TIMEOUT_MS) || 5_000;
+
+export async function searchWithTimeout(query, opts, client) {
+  return Promise.race([
+    client.search(query, opts),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("graph search timeout")), GRAPH_SEARCH_TIMEOUT_MS)
+    ),
+  ]).catch(() => []);
+}
+
 class GraphQueryClient {
   #client = null;
   #available = false;
