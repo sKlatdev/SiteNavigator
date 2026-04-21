@@ -1496,7 +1496,7 @@ function SyncStatusPanel({ syncState }) {
   );
 }
 
-function Dashboard({ summary, backupStale, onQuickExport, onQuickFilterTag, onOpenExplorer, onHeatmapCellClick, customers, templates, heatmapCells, briefs }) {
+function Dashboard({ summary, syncState, onQuickFilterTag, onOpenExplorer, onHeatmapCellClick, customers, templates, heatmapCells, briefs }) {
   const total = summary?.total ?? 0;
   const newlyDiscovered = summary?.newlyDiscovered ?? 0;
   const recentlyUpdated = summary?.recentlyUpdated ?? 0;
@@ -1515,24 +1515,7 @@ function Dashboard({ summary, backupStale, onQuickExport, onQuickFilterTag, onOp
     : 0;
   return (
     <div className="space-y-4">
-      {backupStale && (
-        <div style={{
-          background: 'var(--glass-bg)',
-          border: '1.5px solid var(--glass-border)',
-          boxShadow: 'var(--glass-shadow)',
-          backdropFilter: 'blur(var(--glass-blur))',
-          borderRadius: 'var(--glass-radius)',
-          padding: '1rem',
-        }} className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm">
-            <AlertTriangle size={16} />
-            It’s been over 14 days since your last Full Backup export.
-          </div>
-          <button onClick={onQuickExport} className="text-xs px-2 py-1 rounded-md bg-amber-600 text-white">
-            Export now
-          </button>
-        </div>
-      )}
+      <SyncStatusPanel syncState={syncState} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[{
           label: 'Total Indexed Objects', value: total, helper: 'All indexed objects in the selected scope', action: 'open_explorer'
