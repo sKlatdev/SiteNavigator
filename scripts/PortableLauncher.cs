@@ -20,6 +20,9 @@ internal static class Program
     [STAThread]
     private static int Main()
     {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+
         string launcherPath = Assembly.GetExecutingAssembly().Location;
         string launcherDir = Path.GetDirectoryName(launcherPath) ?? AppDomain.CurrentDomain.BaseDirectory;
         string runtimeRoot = Path.Combine(
@@ -41,26 +44,39 @@ internal static class Program
             File.WriteAllBytes(coreExePath, payload);
         }
 
-        ProcessStartInfo startInfo = BuildStartInfo(coreExePath, launcherDir);
+        string portEnv = Environment.GetEnvironmentVariable("PORT");
+        _port = int.TryParse(portEnv, out int parsedPort) && parsedPort > 0 ? parsedPort : 8787;
 
-        using (Process child = Process.Start(startInfo))
+        System.Threading.SynchronizationContext uiContext =
+            System.Threading.SynchronizationContext.Current
+            ?? new System.Windows.Forms.WindowsFormsSynchronizationContext();
+        System.Threading.SynchronizationContext.SetSynchronizationContext(uiContext);
+
+        Process currentChild = SpawnChild(coreExePath, launcherDir);
+
+        using (SafeJobHandle jobHandle = CreateKillOnCloseJob())
         {
-            if (child == null)
+            if (!AssignProcessToJobObject(jobHandle.DangerousGetHandle(), currentChild.Handle))
             {
-                throw new InvalidOperationException("Failed to start packaged runtime.");
+                throw new InvalidOperationException("Failed to bind packaged runtime to process job.");
             }
 
-            using (SafeJobHandle jobHandle = CreateKillOnCloseJob())
+            currentChild.EnableRaisingEvents = true;
+            currentChild.Exited += (s, e) =>
             {
-                if (!AssignProcessToJobObject(jobHandle.DangerousGetHandle(), child.Handle))
-                {
-                    throw new InvalidOperationException("Failed to bind packaged runtime to process job.");
-                }
+                if (_restarting) return;
+                uiContext.Post(_ => Application.Exit(), null);
+            };
 
-                child.WaitForExit();
-                return child.ExitCode;
+            Process[] childCell = new Process[] { currentChild };
+
+            using (NotifyIcon tray = CreateTrayIcon(_port, coreExePath, launcherDir, jobHandle, childCell, uiContext))
+            {
+                Application.Run();
             }
         }
+
+        return 0;
     }
 
     private static Process SpawnChild(string coreExePath, string launcherDir)
