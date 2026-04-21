@@ -181,10 +181,9 @@ internal static class Program
         restartItem.Click += (s, e) =>
         {
             _restarting = true;
+            Process oldChild = childCell[0];
             try
             {
-                KillChild(childCell[0]);
-                childCell[0].Dispose();
                 Process newChild = SpawnChild(coreExePath, launcherDir);
                 newChild.EnableRaisingEvents = true;
                 newChild.Exited += (ps, pe) =>
@@ -194,13 +193,19 @@ internal static class Program
                 };
                 if (!AssignProcessToJobObject(jobHandle.DangerousGetHandle(), newChild.Handle))
                 {
+                    newChild.Kill();
+                    newChild.Dispose();
                     throw new InvalidOperationException("Failed to bind restarted runtime to process job.");
                 }
                 childCell[0] = newChild;
-            }
-            finally
-            {
+                KillChild(oldChild);
+                oldChild.Dispose();
                 _restarting = false;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Restart failed: " + ex.Message, "SiteNavigator", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Application.Exit();
             }
         };
 
