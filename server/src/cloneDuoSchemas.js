@@ -404,6 +404,7 @@ export function createRequiredField(config) {
   return {
     requiredForBlueprintFamilies: [BLUEPRINT_FAMILIES.GENERIC_SAML, BLUEPRINT_FAMILIES.INTEGRATION_RUNBOOK_SAML],
     requiredForSourceProtocols: ["saml"],
+    confidenceThreshold: 0.6,
     ...config,
   };
 }

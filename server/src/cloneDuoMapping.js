@@ -12,6 +12,7 @@ import {
 } from "./cloneDuoSchemas.js";
 import { enhanceCloneDuoDraft } from "./cloneDuoGeneration.js";
 import { resolveAmbiguityWithGraph } from "./cloneDuoGraphResolver.js";
+import { graphQueryClient } from "./graphQueryClient.js";
 
 const URL_PATTERN = /https?:\/\/[^\s)]+/gi;
 
@@ -52,6 +53,15 @@ async function resolveFieldState(field, evidence) {
   const candidates = collectCandidates(field, evidence);
 
   if (!candidates.length) {
+    const graphResult = await resolveFieldWithGraph(field, evidence);
+    if (graphResult) {
+      state.status = FIELD_STATUS.RESOLVED;
+      state.value = graphResult.value;
+      state.resolvedBy = "graph_search";
+      state.graphConfidence = graphResult.confidence;
+      state.graphEvidenceUrls = graphResult.evidenceUrls;
+      return state;
+    }
     return applyUnresolvedState(state, field, evidence);
   }
 
@@ -441,4 +451,62 @@ function formatFieldValue(field) {
     return field.value.join(", ");
   }
   return String(field.value || "");
+}
+
+const GRAPH_SEARCH_TIMEOUT_MS = 5_000;
+
+async function graphSearchWithTimeout(query, opts, client) {
+  return Promise.race([
+    client.search(query, opts),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("graph search timeout")), GRAPH_SEARCH_TIMEOUT_MS)
+    ),
+  ]).catch(() => []);
+}
+
+export async function resolveFieldWithGraph(field, evidence, _client) {
+  const client = _client ?? graphQueryClient;
+  if (!client.isAvailable()) return null;
+
+  const query = [field.label, ...(field.extractionAliases || [])].join(" ");
+  try {
+    const hits = await graphSearchWithTimeout(query, { limit: 3 }, client);
+    const threshold = Number(field.confidenceThreshold ?? 0.6);
+
+    for (const hit of hits) {
+      if (Number(hit.score || 0) < threshold) continue;
+      const excerpt = String(hit.excerpt || "");
+      if (!excerpt) continue;
+
+      const syntheticBlock = {
+        id: `gn_${String(hit.url || "").slice(-20)}`,
+        type: "paragraph_block",
+        headingPath: [],
+        ordinal: 0,
+        text: excerpt,
+        extractedFields: excerpt
+          .split(/\n+/)
+          .map((line) => {
+            const sep = line.indexOf("|");
+            if (sep === -1) return null;
+            const label = line.slice(0, sep).trim();
+            const value = line.slice(sep + 1).trim();
+            return label && value ? { label, value } : null;
+          })
+          .filter(Boolean),
+      };
+      const candidates = collectCandidates(field, [syntheticBlock]);
+      if (!candidates.length) continue;
+
+      const values = uniqueCandidateValues(candidates);
+      return {
+        value: field.cardinality === "multiple" ? values : values[0],
+        confidence: Number(hit.score),
+        evidenceUrls: [hit.url || ""].filter(Boolean),
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
