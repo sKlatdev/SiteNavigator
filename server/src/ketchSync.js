@@ -27,7 +27,7 @@ const runtimeKetchPath = path.join(runtimeKetchDir, bundledExeName);
 const ketchPortableRoot = path.join(dataDir, "ketch-runtime");
 export const gitNexusDocsDir = path.join(dataDir, "gitnexus-docs");
 const ketchDepth = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_DEPTH || 3));
-const ketchConcurrency = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_CONCURRENCY || 8));
+const ketchConcurrency = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_CONCURRENCY || 48));
 const slowCrawlPageMs = Math.max(0, Number(process.env.SITENAVIGATOR_SLOW_CRAWL_PAGE_MS || 5000));
 
 export function classifyKetchError(record) {
