@@ -1412,6 +1412,90 @@ function TopBar(props) {
   );
 }
 
+function SyncStatusPanel({ syncState }) {
+  const isActive = !!(syncState?.loading || syncState?.inProgress);
+  const lastRun = syncState?.lastRun;
+  const progress = syncState?.progress ?? {};
+  const engine = syncState?.engine ?? "legacy";
+  const engineLabel = formatSyncEngineLabel(engine);
+  const lastSyncLabel = lastRun?.finishedAt || lastRun?.startedAt || null;
+  const lastSyncDuration = formatDuration(lastRun?.durationMs);
+  const currentVendorLabel = formatSyncVendorLabel(progress?.currentVendor);
+  const percent = progress?.percent ?? (isActive ? 0 : 100);
+
+  const throttledCount = isActive ? (progress?.throttledCount ?? 0) : (lastRun?.throttledCount ?? 0);
+  const droppedCount = isActive ? (progress?.droppedCount ?? 0) : (lastRun?.droppedCount ?? 0);
+
+  const throttleDropText = [
+    throttledCount ? `${throttledCount} throttled` : "",
+    droppedCount ? `${droppedCount} dropped` : "",
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div style={{
+      background: 'var(--glass-bg)',
+      border: '1.5px solid var(--glass-border)',
+      boxShadow: 'var(--glass-shadow)',
+      backdropFilter: 'blur(var(--glass-blur))',
+      borderRadius: 'var(--glass-radius)',
+      padding: '1rem',
+    }}>
+      {/* Last run summary */}
+      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+        {syncState?.error ? (
+          <span className="text-rose-600 dark:text-rose-300">Sync error: {syncState.error}</span>
+        ) : lastSyncLabel ? (
+          <span>
+            Engine {engineLabel} · Last sync: {lastSyncLabel} · duration {lastSyncDuration} ·
+            scanned {lastRun?.scannedCount ?? 0} · new {lastRun?.discoveredCount ?? 0} · changed {lastRun?.changedCount ?? 0}
+            {throttleDropText && !isActive ? ` · ${throttleDropText}` : ""}
+          </span>
+        ) : (
+          <span className="text-slate-400 dark:text-slate-500">No sync run recorded yet.</span>
+        )}
+      </div>
+
+      {/* Progress bar — always shown */}
+      <div className="mt-2 h-2.5 rounded-full overflow-hidden bg-slate-800/60 ring-1 ring-slate-700/50">
+        <div
+          className="sync-bar-shimmer h-full rounded-full"
+          style={{
+            width: `${percent}%`,
+            background: 'linear-gradient(to right, #3b82f6, #6366f1, #8b5cf6)',
+            backgroundSize: '200% 100%',
+            boxShadow: isActive ? '0 0 8px 1px rgba(99,102,241,0.5)' : 'none',
+            opacity: isActive ? 1 : 0.4,
+            transition: 'width 500ms ease-out',
+            animation: isActive ? 'shimmer 2s linear infinite' : 'none',
+          }}
+        />
+      </div>
+
+      {/* Live stats — only when active */}
+      {isActive && (
+        <>
+          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            {engineLabel}
+            {engine === "ketch"
+              ? ` · vendor ${progress?.completedVendors ?? 0}/${progress?.totalVendors ?? progress?.queued ?? 0}`
+              : ` · ${percent}% · processed ${progress?.processed ?? 0}/${progress?.queued ?? 0}`}
+            {engine === "ketch" ? ` · pages scanned ${progress?.scannedCount ?? 0}` : ""}
+            {engine === "ketch" ? ` · new ${progress?.discoveredCount ?? 0}` : ""}
+            {engine === "ketch" ? ` · changed ${progress?.changedCount ?? 0}` : ""}
+            {currentVendorLabel ? ` · active vendor ${currentVendorLabel}` : ""}
+            {throttleDropText ? ` · ${throttleDropText}` : ""}
+          </div>
+          {progress?.currentUrl && (
+            <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+              Current page: {progress.currentUrl}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ summary, backupStale, onQuickExport, onQuickFilterTag, onOpenExplorer, onHeatmapCellClick, customers, templates, heatmapCells, briefs }) {
   const total = summary?.total ?? 0;
   const newlyDiscovered = summary?.newlyDiscovered ?? 0;
@@ -2646,12 +2730,18 @@ function canonicalizePingPrefix(prefix) {
   if (value === "pa" || value.startsWith("pingaccess")) return "pingaccess";
   if (value === "pd" || value.startsWith("pingdirectory")) return "pingdirectory";
   if (value === "idm" || value.startsWith("pingidm")) return "pingidm";
-  if (value === "pingid" || value.startsWith("pingidentity")) return "pingidentity";
+  if (value === "pingid" || value.startsWith("pingid") || value.startsWith("pingidentity")) return "pingidentity";
+  if (value.startsWith("pingoneaic")) return "pingoneaic";
   if (value.startsWith("pingone")) return "pingone";
   if (value.startsWith("pingauthorize")) return "pingauthorize";
   if (value.startsWith("pingintelligence")) return "pingintelligence";
   if (value.startsWith("pingcentral")) return "pingcentral";
   if (value.startsWith("pingdatagovernance")) return "pingdatagovernance";
+  if (value.startsWith("pingam")) return "pingam";
+  if (value === "auth-node-ref" || value.startsWith("auth_node") || value.startsWith("auth-node")) return "pingam";
+  if (value === "pingds" || value.startsWith("pingds")) return "pingds";
+  if (value.startsWith("pinggateway")) return "pinggateway";
+  if (value === "openicf") return "pingidm";
   if (value.startsWith("davinci")) return "davinci";
 
   return value;
@@ -2697,12 +2787,16 @@ const PING_SECTION_ORDER = [
   "pingfederate",
   "pingaccess",
   "pingone",
+  "pingoneaic",
+  "pingam",
+  "pingds",
   "pingauthorize",
   "pingdirectory",
   "pingintelligence",
   "pingcentral",
   "pingdatagovernance",
   "pingidm",
+  "pinggateway",
   "davinci",
   "other",
 ];
@@ -2766,12 +2860,16 @@ const COMPETITOR_VENDOR_CONFIGS = [
       pingfederate: "PingFederate",
       pingaccess: "PingAccess",
       pingone: "PingOne",
+      pingoneaic: "PingOne AIC",
+      pingam: "PingAM",
+      pingds: "PingDS",
       pingauthorize: "PingAuthorize",
       pingdirectory: "PingDirectory",
       pingintelligence: "PingIntelligence",
       pingcentral: "PingCentral",
       pingdatagovernance: "PingDataGovernance",
       pingidm: "PingIDM",
+      pinggateway: "PingGateway",
       davinci: "DaVinci",
       other: "Other",
     },
@@ -4179,7 +4277,7 @@ function ManageCustomersView({
  * ========================================================= */
 export default function App() {
   const FETCH_ALL_RESULTS_PAGE_SIZE = 0;
-  const MAX_DISPLAY_RESULTS = 100;
+  const MAX_DISPLAY_RESULTS = 10000;
   const defaultBackupOptions = {
     appearance: true,
     templates: true,
@@ -4279,7 +4377,7 @@ export default function App() {
       other: 0,
     },
     page: 1,
-    pageSize: 25,
+    pageSize: 10000,
     totalPages: 1,
     hasNextPage: false,
     hasPrevPage: false,
