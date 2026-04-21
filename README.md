@@ -247,6 +247,58 @@ First matching signal is returned; client uses this to filter "recently updated"
 
 ---
 
+## GitNexus Integration
+
+SiteNavigator uses a three-layer architecture for intelligent search, gap analysis, and SAML field extraction:
+
+```
+Ketch (crawler) → gitnexus-docs/<vendor>/ → gitnexus analyze → .gitnexus/ → MCP stdio → graphQueryClient → API
+```
+
+**Ketch** crawls each vendor's documentation site and writes per-page YAML-frontmatter markdown to `server/data/gitnexus-docs/<vendor>/` via `--output-dir --vendor` flags. **GitNexus** ingests those files, builds a knowledge graph with BM25 + semantic embeddings, and exposes it via MCP. **SiteNavigator's server** queries GitNexus through `graphQueryClient.js` (an MCP stdio client) for all search, gap, and disambiguation operations. All GitNexus paths degrade gracefully to legacy behavior when the binary is unavailable.
+
+### Phase Status
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1 — Crawl → Index pipeline | ✅ Shipped | Ketch `--output-dir`, `gitNexusIndexer.js`, `graphQueryClient.js`, `/api/compare/related` |
+| 2 — Gap analysis | ✅ Shipped | `/api/gap/analyze` backed by GitNexus BM25+semantic search |
+| 3 — Clone Duo ambiguity resolver | ✅ Shipped | `cloneDuoGraphResolver.js` reduces `UNRESOLVED_AMBIGUOUS` field count |
+| 4 — Graph-backed missing field resolution | 🔄 In progress | `cloneDuoMapping.js` queries graph for fields that alias matching misses |
+| 5 — Replace DOM traversal | 📋 Planned | Full graph-extraction pipeline for `cloneDuoExtraction.js` |
+
+### GitNexus Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SITENAVIGATOR_GITNEXUS_BIN` | `gitnexus` | Path to `gitnexus` binary; must be on PATH or set explicitly |
+| `SITENAVIGATOR_SEARCH_ENGINE` | `auto` | `gitnexus` (force graph search), `legacy` (force token matcher), `auto` (graph-first with fallback) |
+| `SITENAVIGATOR_KETCH_BIN` | (bundled) | Override bundled Ketch binary path |
+| `SITENAVIGATOR_KETCH_DEPTH` | `3` | BFS crawl depth per vendor |
+| `SITENAVIGATOR_KETCH_CONCURRENCY` | `8` | Concurrent Ketch crawl workers |
+
+### First-Run Setup
+
+GitNexus must be installed and on PATH before graph features are active. SiteNavigator starts and serves the UI without it — graph features silently fall back to legacy behavior.
+
+```bash
+# Install GitNexus (see https://github.com/abhigyanpatwari/GitNexus)
+npm install -g gitnexus
+
+# Verify
+gitnexus --version
+
+# Run a sync — Ketch crawls, then gitNexusIndexer fires automatically
+# POST /api/sync via the UI, or via curl:
+curl -X POST http://localhost:8787/api/sync
+
+# Check graph status
+curl http://localhost:8787/api/graph/status
+# → { "available": true, "indexed": true, "progress": { "phase": "done" } }
+```
+
+---
+
 ## Development Workflow
 
 ### Building & Testing
