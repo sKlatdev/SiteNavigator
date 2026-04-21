@@ -29,7 +29,12 @@ if (Test-Path $finalExe) {
   Remove-Item -Path $finalExe -Force
 }
 
-& $csc /nologo /target:winexe /optimize+ "/out:$finalExe" "/resource:$coreExe,SiteNavigator.Core.exe" $launcherSource
+& $csc /nologo /target:winexe /optimize+ `
+    /reference:System.Windows.Forms.dll `
+    /reference:System.Drawing.dll `
+    "/out:$finalExe" `
+    "/resource:$coreExe,SiteNavigator.Core.exe" `
+    $launcherSource
 if ($LASTEXITCODE -ne 0) {
   throw "Launcher compilation failed with exit code $LASTEXITCODE"
 }
