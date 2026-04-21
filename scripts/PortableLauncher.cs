@@ -131,21 +131,25 @@ internal static class Program
         System.Threading.SynchronizationContext uiContext)
     {
         // Build a 16x16 teal icon with a white "S" glyph.
-        Bitmap bmp = new Bitmap(16, 16);
-        using (Graphics g = Graphics.FromImage(bmp))
+        Icon icon;
+        using (Bitmap bmp = new Bitmap(16, 16))
         {
-            g.Clear(Color.FromArgb(0x1a, 0x6b, 0x6b));
-            using (Font font = new Font("Arial", 7f, FontStyle.Bold, GraphicsUnit.Point))
-            using (SolidBrush brush = new SolidBrush(Color.White))
+            using (Graphics g = Graphics.FromImage(bmp))
             {
-                SizeF size = g.MeasureString("S", font);
-                float x = (16f - size.Width) / 2f;
-                float y = (16f - size.Height) / 2f;
-                g.DrawString("S", font, brush, x, y);
+                g.Clear(Color.FromArgb(0x1a, 0x6b, 0x6b));
+                using (Font font = new Font("Arial", 7f, FontStyle.Bold, GraphicsUnit.Point))
+                using (SolidBrush brush = new SolidBrush(Color.White))
+                {
+                    SizeF size = g.MeasureString("S", font);
+                    float x = (16f - size.Width) / 2f;
+                    float y = (16f - size.Height) / 2f;
+                    g.DrawString("S", font, brush, x, y);
+                }
             }
+            IntPtr hicon = bmp.GetHicon();
+            icon = (Icon)Icon.FromHandle(hicon).Clone();
+            DestroyIcon(hicon);
         }
-        IntPtr hicon = bmp.GetHicon();
-        Icon icon = Icon.FromHandle(hicon);
 
         ContextMenuStrip menu = new ContextMenuStrip();
         ToolStripMenuItem openItem = new ToolStripMenuItem("Open SiteNavigator");
@@ -161,20 +165,27 @@ internal static class Program
         restartItem.Click += (s, e) =>
         {
             _restarting = true;
-            KillChild(childCell[0]);
-            Process newChild = SpawnChild(coreExePath, launcherDir);
-            newChild.EnableRaisingEvents = true;
-            newChild.Exited += (ps, pe) =>
+            try
             {
-                if (_restarting) return;
-                uiContext.Post(_ => Application.Exit(), null);
-            };
-            if (!AssignProcessToJobObject(jobHandle.DangerousGetHandle(), newChild.Handle))
-            {
-                throw new InvalidOperationException("Failed to bind restarted runtime to process job.");
+                KillChild(childCell[0]);
+                childCell[0].Dispose();
+                Process newChild = SpawnChild(coreExePath, launcherDir);
+                newChild.EnableRaisingEvents = true;
+                newChild.Exited += (ps, pe) =>
+                {
+                    if (_restarting) return;
+                    uiContext.Post(_ => Application.Exit(), null);
+                };
+                if (!AssignProcessToJobObject(jobHandle.DangerousGetHandle(), newChild.Handle))
+                {
+                    throw new InvalidOperationException("Failed to bind restarted runtime to process job.");
+                }
+                childCell[0] = newChild;
             }
-            childCell[0] = newChild;
-            _restarting = false;
+            finally
+            {
+                _restarting = false;
+            }
         };
 
         quitItem.Click += (s, e) =>
@@ -367,4 +378,8 @@ internal static class Program
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr handle);
 }
