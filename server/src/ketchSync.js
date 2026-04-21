@@ -434,6 +434,19 @@ async function runSeedCrawl(ketchBin, seed, vendorRun, store, stats, seenUrls) {
     syncProgress.currentDepth = Number(record?.depth || 0);
 
     if (record?.error) {
+      const { type, detail } = classifyKetchError(record);
+      const errUrl = String(record?.page?.url || record?.url || "");
+      if (type === "throttle") {
+        stats.throttledCount += 1;
+        syncProgress.throttledCount = stats.throttledCount;
+        syncLog(`[${vendorRun.id}] throttled: ${errUrl} (${detail})`);
+      } else if (type === "drop") {
+        stats.droppedCount += 1;
+        syncProgress.droppedCount = stats.droppedCount;
+        syncLog(`[${vendorRun.id}] dropped: ${errUrl} (${detail})`);
+      } else {
+        syncLog(`[${vendorRun.id}] error: ${errUrl} (${detail})`);
+      }
       stats.errorCount += 1;
       syncProgress.errorCount = stats.errorCount;
       continue;
