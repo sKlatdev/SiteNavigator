@@ -86,6 +86,57 @@ internal static class Program
         }
     }
 
+    private static Process SpawnChild(string coreExePath, string launcherDir)
+    {
+        ProcessStartInfo startInfo = new ProcessStartInfo();
+        startInfo.FileName = coreExePath;
+        startInfo.WorkingDirectory = launcherDir;
+        startInfo.UseShellExecute = false;
+        startInfo.CreateNoWindow = true;
+        startInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+        string configuredDataDir = Environment.GetEnvironmentVariable("SITENAVIGATOR_DATA_DIR");
+        startInfo.EnvironmentVariables["SITENAVIGATOR_DATA_DIR"] =
+            string.IsNullOrWhiteSpace(configuredDataDir)
+                ? Path.Combine(launcherDir, "data")
+                : configuredDataDir;
+
+        CopyEnvironmentVariable(startInfo, "PORT");
+        CopyEnvironmentVariable(startInfo, "PORT_RETRY_COUNT");
+        CopyEnvironmentVariable(startInfo, "ALLOWED_ORIGINS");
+        CopyEnvironmentVariable(startInfo, "ENABLE_PATH_IMPORT");
+        CopyEnvironmentVariable(startInfo, "ENABLE_INDEX_PATH_IO");
+        CopyEnvironmentVariable(startInfo, "CONTENT_CACHE_MAX_AGE");
+        CopyEnvironmentVariable(startInfo, "SLOW_ROUTE_MS");
+
+        string openBrowser = Environment.GetEnvironmentVariable("SITENAVIGATOR_OPEN_BROWSER");
+        startInfo.EnvironmentVariables["SITENAVIGATOR_OPEN_BROWSER"] =
+            string.IsNullOrWhiteSpace(openBrowser) ? "true" : openBrowser;
+
+        Process child = Process.Start(startInfo);
+        if (child == null)
+        {
+            throw new InvalidOperationException("Failed to start packaged runtime.");
+        }
+        return child;
+    }
+
+    private static void KillChild(Process child)
+    {
+        try
+        {
+            if (!child.HasExited)
+            {
+                child.Kill();
+            }
+            child.WaitForExit(3000);
+        }
+        catch (InvalidOperationException)
+        {
+            // Process already exited — nothing to do.
+        }
+    }
+
     private static byte[] ReadEmbeddedCorePayload()
     {
         Assembly assembly = Assembly.GetExecutingAssembly();
