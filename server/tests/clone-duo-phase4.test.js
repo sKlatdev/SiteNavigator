@@ -82,3 +82,82 @@ describe("resolveFieldWithGraph", () => {
     assert.deepEqual(result.evidenceUrls, ["https://okta.com/b"]);
   });
 });
+
+import { buildCloneDuoDraft } from "../src/cloneDuoMapping.js";
+
+describe("Phase 4 regression — existing fixtures must still resolve", () => {
+  function makeSourceBundle() {
+    return {
+      schemaVersion: 1,
+      createdAt: "2026-03-26T00:00:00.000Z",
+      sourcePages: [{
+        id: "source_page_1",
+        title: "How to Configure SAML 2.0 for Zoom",
+        url: "https://saml-doc.okta.com/SAML_Docs/How-to-Configure-SAML-2.0-for-Zoom.us.html",
+        vendor: "Okta",
+        category: "competitor_docs",
+        summary: "Zoom SAML configuration steps.",
+      }],
+      evidence: [
+        {
+          id: "ev_2_table",
+          sourcePageId: "source_page_1",
+          type: "table_block",
+          headingPath: ["Configuration Steps"],
+          ordinal: 2,
+          text: "Sign-in Page URL | https://example.okta.com/app/sso/saml\nService Provider (SP) Entity ID | zoom.us\nSignature Hash Algorithm | SHA-256",
+          extractedFields: [
+            { label: "Sign-in Page URL", value: "https://example.okta.com/app/sso/saml" },
+            { label: "Service Provider (SP) Entity ID", value: "zoom.us" },
+            { label: "Signature Hash Algorithm", value: "SHA-256" },
+          ],
+          sourceUrl: "https://example.test/zoom",
+          citationLabel: "Configuration Steps · block 2",
+        },
+        {
+          id: "ev_3_steps",
+          sourcePageId: "source_page_1",
+          type: "ordered_step_block",
+          headingPath: ["Configuration Steps"],
+          ordinal: 3,
+          text: "SP-initiated SSO\nIdP-initiated SSO\nJIT (Just In Time) Provisioning",
+          extractedFields: [],
+          sourceUrl: "https://example.test/zoom",
+          citationLabel: "Configuration Steps · block 3",
+        },
+      ],
+    };
+  }
+
+  it("fields resolved before Phase 4 are still resolved after Phase 4 (fallback path)", async () => {
+    const draft = await buildCloneDuoDraft({
+      sourceItems: [{ title: "How to Configure SAML 2.0 for Zoom" }],
+      sourceBundle: makeSourceBundle(),
+    });
+
+    const ssoUrl = draft.fields.find((f) => f.fieldId === "idp_sso_url");
+    const spEntityId = draft.fields.find((f) => f.fieldId === "sp_entity_id");
+    const sigAlg = draft.fields.find((f) => f.fieldId === "signature_algorithm");
+
+    assert.equal(ssoUrl.status, "resolved", "idp_sso_url must still resolve");
+    assert.equal(ssoUrl.value, "https://example.okta.com/app/sso/saml");
+    assert.equal(spEntityId.status, "resolved", "sp_entity_id must still resolve");
+    assert.equal(spEntityId.value, "zoom.us");
+    assert.equal(sigAlg.status, "resolved", "signature_algorithm must still resolve");
+    assert.equal(sigAlg.value, "SHA-256");
+  });
+
+  it("fields with no evidence fall through to UNRESOLVED (graph unavailable in test)", async () => {
+    const draft = await buildCloneDuoDraft({
+      sourceItems: [{ title: "How to Configure SAML 2.0 for Zoom" }],
+      sourceBundle: { ...makeSourceBundle(), evidence: [] },
+    });
+
+    const allStatuses = draft.fields.map((f) => f.status);
+    assert.ok(
+      allStatuses.every((s) => s !== "resolved"),
+      `Expected all unresolved, got: ${allStatuses.join(", ")}`
+    );
+    assert.ok(draft.fields.length > 0);
+  });
+});
