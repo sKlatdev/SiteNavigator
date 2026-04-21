@@ -28,26 +28,46 @@ const ketchPortableRoot = path.join(dataDir, "ketch-runtime");
 export const gitNexusDocsDir = path.join(dataDir, "gitnexus-docs");
 const ketchDepth = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_DEPTH || 3));
 const ketchConcurrency = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_CONCURRENCY || 8));
+const slowCrawlPageMs = Math.max(0, Number(process.env.SITENAVIGATOR_SLOW_CRAWL_PAGE_MS || 5000));
+
+function syncLog(msg) {
+  console.log(`[sync ${new Date().toISOString()}] ${msg}`);
+}
+
+// Minimum number of pages a vendor crawl must return before we deactivate
+// pages not seen in this run. Guards against bot-blocked or JS-only pages
+// wiping out thousands of previously indexed entries.
+const VENDOR_MIN_CRAWL_RESULTS = 10;
 
 const KETCH_VENDOR_RUNS = [
   {
     id: "duo",
-    seed: "https://duo.com",
+    seeds: ["https://duo.com"],
     matchesUrl: (url) => /(^|\.)duo\.com$/i.test(hostnameFromUrl(url)),
   },
   {
     id: "okta",
-    seed: "https://help.okta.com",
+    // help.okta.com root is a JS SPA with few static links; start from the
+    // content index page which has dense anchor-based navigation, and include
+    // saml-doc.okta.com which is a separate static-HTML subdomain.
+    seeds: [
+      "https://help.okta.com/en-us/content/index.htm",
+      "https://saml-doc.okta.com",
+    ],
+    allow: ["/en-us/"],
     matchesUrl: (url) => /(^|\.)(help|saml-doc)\.okta\.com$/i.test(hostnameFromUrl(url)),
   },
   {
     id: "pingidentity",
-    seed: "https://docs.pingidentity.com",
+    seeds: ["https://docs.pingidentity.com"],
     matchesUrl: (url) => /(^|\.)docs\.pingidentity\.com$/i.test(hostnameFromUrl(url)),
   },
   {
     id: "entra",
-    seed: "https://learn.microsoft.com/en-us/entra/identity/saas-apps",
+    // The saas-apps root uses JS navigation; the tutorial-list page is a
+    // static index with direct links to every tutorial.
+    seeds: ["https://learn.microsoft.com/en-us/entra/identity/saas-apps/tutorial-list"],
+    allow: ["entra/identity/saas-apps"],
     matchesUrl: (url) => {
       const host = hostnameFromUrl(url);
       if (!/(^|\.)learn\.microsoft\.com$/i.test(host)) return false;
@@ -238,10 +258,10 @@ function qualityEquals(a, b) {
 }
 
 export function mapKetchResultToRow(result, existingRow = null) {
-  const page = result?.page && typeof result.page === "object" ? result.page : null;
-  if (!page) return null;
+  // Ketch v2+ emits flat records; older builds nested under result.page
+  const page = result?.page && typeof result.page === "object" ? result.page : result;
 
-  const rowUrl = String(page.url || result.url || "").trim();
+  const rowUrl = String(page.url || "").trim();
   if (!rowUrl) return null;
 
   const quality = normalizeKetchQuality(page.quality);
@@ -339,22 +359,26 @@ function updateVendorProgress(completedCount, currentUrl = null, currentDepth = 
   syncProgress.percent = Math.min(100, Math.round((completedCount / Math.max(1, KETCH_VENDOR_RUNS.length)) * 100));
 }
 
-async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
-  const seenUrls = new Set();
-  syncProgress.currentVendor = vendorRun.id;
+async function runSeedCrawl(ketchBin, seed, vendorRun, store, stats, seenUrls) {
+  const allow = Array.isArray(vendorRun.allow) ? vendorRun.allow : [];
   const args = [
     "--json",
     "crawl",
-    vendorRun.seed,
+    seed,
     "--depth",
     String(ketchDepth),
     "--concurrency",
     String(ketchConcurrency),
+    "--no-cache",
     "--output-dir",
     gitNexusDocsDir,
     "--vendor",
     vendorRun.id,
+    ...allow.flatMap((p) => ["--allow", p]),
   ];
+
+  const seedStart = Date.now();
+  syncLog(`[${vendorRun.id}] seed start: ${seed}`);
 
   const child = spawn(ketchBin, args, {
     env: {
@@ -369,6 +393,9 @@ async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
     stderr.push(chunk.toString());
   });
 
+  let lastUrlTime = Date.now();
+  let lastUrl = seed;
+
   const lineReader = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
   for await (const line of lineReader) {
     const trimmed = String(line || "").trim();
@@ -381,7 +408,16 @@ async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
       continue;
     }
 
-    syncProgress.currentUrl = String(record?.page?.url || record?.url || vendorRun.seed || "");
+    const nowMs = Date.now();
+    const currentUrl = String(record?.page?.url || record?.url || seed || "");
+    const elapsed = nowMs - lastUrlTime;
+    if (slowCrawlPageMs > 0 && elapsed >= slowCrawlPageMs) {
+      syncLog(`[${vendorRun.id}] slow page ${elapsed}ms: ${lastUrl}`);
+    }
+    lastUrl = currentUrl;
+    lastUrlTime = nowMs;
+
+    syncProgress.currentUrl = currentUrl;
     syncProgress.currentDepth = Number(record?.depth || 0);
 
     if (record?.error) {
@@ -391,9 +427,7 @@ async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
     }
 
     const rowUrl = String(record?.page?.url || record?.url || "");
-    if (!isEnglishContentUrl(rowUrl)) {
-      continue;
-    }
+    if (!isEnglishContentUrl(rowUrl)) continue;
 
     const existing = getByUrl(store, rowUrl);
     const mapped = mapKetchResultToRow(record, existing);
@@ -418,9 +452,27 @@ async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
   });
 
   if (exitCode !== 0) {
-    throw new Error(`Ketch crawl failed for ${vendorRun.id}: ${stderr.join("").trim() || `exit ${exitCode}`}`);
+    throw new Error(`Ketch crawl failed for ${vendorRun.id} (${seed}): ${stderr.join("").trim() || `exit ${exitCode}`}`);
   }
 
+  const seedMs = Date.now() - seedStart;
+  syncLog(`[${vendorRun.id}] seed done: ${seed} — ${seenUrls.size} pages in ${(seedMs / 1000).toFixed(1)}s`);
+}
+
+async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
+  syncProgress.currentVendor = vendorRun.id;
+  const seeds = Array.isArray(vendorRun.seeds) ? vendorRun.seeds : [vendorRun.seed].filter(Boolean);
+  const seenUrls = new Set();
+  const vendorStart = Date.now();
+  syncLog(`[${vendorRun.id}] vendor start (${seeds.length} seed${seeds.length !== 1 ? "s" : ""})`);
+
+  for (const seed of seeds) {
+    syncProgress.currentUrl = seed;
+    await runSeedCrawl(ketchBin, seed, vendorRun, store, stats, seenUrls);
+  }
+
+  const vendorMs = Date.now() - vendorStart;
+  syncLog(`[${vendorRun.id}] vendor done — ${seenUrls.size} total pages in ${(vendorMs / 1000).toFixed(1)}s`);
   return seenUrls;
 }
 
@@ -429,6 +481,8 @@ export async function runKetchIncrementalSync() {
   const store = readStore();
   const runId = `sync_${Date.now()}`;
   const startedAt = nowIso();
+  const syncStart = Date.now();
+  syncLog(`sync start — ${KETCH_VENDOR_RUNS.length} vendor(s)`);
   const stats = {
     scannedCount: 0,
     discoveredCount: 0,
@@ -468,7 +522,7 @@ export async function runKetchIncrementalSync() {
     unchangedCount: 0,
     skippedNotModifiedCount: 0,
     errorCount: 0,
-    currentUrl: KETCH_VENDOR_RUNS[0]?.seed || null,
+    currentUrl: (Array.isArray(KETCH_VENDOR_RUNS[0]?.seeds) ? KETCH_VENDOR_RUNS[0].seeds[0] : KETCH_VENDOR_RUNS[0]?.seed) || null,
     currentDepth: 0,
     percent: 0,
   });
@@ -479,11 +533,18 @@ export async function runKetchIncrementalSync() {
 
   try {
     for (const vendorRun of KETCH_VENDOR_RUNS) {
-      syncProgress.currentUrl = vendorRun.seed;
+      const primarySeed = Array.isArray(vendorRun.seeds) ? vendorRun.seeds[0] : vendorRun.seed;
+      syncProgress.currentUrl = primarySeed;
       const seenUrls = await runVendorCrawl(ketchBin, vendorRun, store, stats);
-      applySeenUrlsForVendor(store, vendorRun, seenUrls);
+      // Only deactivate pages not seen in this run when the crawl returned a
+      // meaningful number of results. A very small result set usually means
+      // bot-blocking or JS-only rendering prevented link discovery — in that
+      // case preserving existing indexed data is safer than wiping it.
+      if (seenUrls.size >= VENDOR_MIN_CRAWL_RESULTS) {
+        applySeenUrlsForVendor(store, vendorRun, seenUrls);
+      }
       completedCount += 1;
-      updateVendorProgress(completedCount, vendorRun.seed, 0);
+      updateVendorProgress(completedCount, primarySeed, 0);
       writeStore(store);
     }
   } catch (error) {
@@ -516,6 +577,9 @@ export async function runKetchIncrementalSync() {
     errorCount: stats.errorCount + (failed ? 1 : 0),
     percent: failed ? syncProgress.percent : 100,
   });
+
+  const totalMs = Date.now() - syncStart;
+  syncLog(`sync ${failed ? "failed" : "done"} — ${stats.scannedCount} pages scanned in ${(totalMs / 1000).toFixed(1)}s`);
 
   if (failed) {
     throw new Error(failureMessage);

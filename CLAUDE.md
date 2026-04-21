@@ -47,6 +47,7 @@ Ketch crawl → server/data/gitnexus-docs/<vendor>/ → gitnexus analyze → .gi
 | `PORT` | `8787` | Server port |
 | `SITENAVIGATOR_DATA_DIR` | `server/data` | Index storage directory |
 | `SITENAVIGATOR_GRAPH_SEARCH_TIMEOUT_MS` | `5000` | Timeout in ms for `searchWithTimeout` calls to GitNexus graph search |
+| `SITENAVIGATOR_SLOW_CRAWL_PAGE_MS` | `5000` | Log crawled pages where the gap between records exceeds N ms; set 0 to disable |
 
 ## Coding Boundaries
 
