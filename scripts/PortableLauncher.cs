@@ -122,6 +122,87 @@ internal static class Program
         }
     }
 
+    private static NotifyIcon CreateTrayIcon(
+        int port,
+        string coreExePath,
+        string launcherDir,
+        SafeJobHandle jobHandle,
+        Process[] childCell,
+        System.Threading.SynchronizationContext uiContext)
+    {
+        // Build a 16x16 teal icon with a white "S" glyph.
+        Bitmap bmp = new Bitmap(16, 16);
+        using (Graphics g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.FromArgb(0x1a, 0x6b, 0x6b));
+            using (Font font = new Font("Arial", 7f, FontStyle.Bold, GraphicsUnit.Point))
+            using (SolidBrush brush = new SolidBrush(Color.White))
+            {
+                SizeF size = g.MeasureString("S", font);
+                float x = (16f - size.Width) / 2f;
+                float y = (16f - size.Height) / 2f;
+                g.DrawString("S", font, brush, x, y);
+            }
+        }
+        IntPtr hicon = bmp.GetHicon();
+        Icon icon = Icon.FromHandle(hicon);
+
+        ContextMenuStrip menu = new ContextMenuStrip();
+        ToolStripMenuItem openItem = new ToolStripMenuItem("Open SiteNavigator");
+        ToolStripMenuItem restartItem = new ToolStripMenuItem("Restart");
+        ToolStripMenuItem quitItem = new ToolStripMenuItem("Quit");
+
+        openItem.Click += (s, e) =>
+        {
+            try { Process.Start("http://localhost:" + port); }
+            catch { }
+        };
+
+        restartItem.Click += (s, e) =>
+        {
+            _restarting = true;
+            KillChild(childCell[0]);
+            Process newChild = SpawnChild(coreExePath, launcherDir);
+            newChild.EnableRaisingEvents = true;
+            newChild.Exited += (ps, pe) =>
+            {
+                if (_restarting) return;
+                uiContext.Post(_ => Application.Exit(), null);
+            };
+            if (!AssignProcessToJobObject(jobHandle.DangerousGetHandle(), newChild.Handle))
+            {
+                throw new InvalidOperationException("Failed to bind restarted runtime to process job.");
+            }
+            childCell[0] = newChild;
+            _restarting = false;
+        };
+
+        quitItem.Click += (s, e) =>
+        {
+            KillChild(childCell[0]);
+            Application.Exit();
+        };
+
+        menu.Items.Add(openItem);
+        menu.Items.Add(restartItem);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(quitItem);
+
+        NotifyIcon tray = new NotifyIcon();
+        tray.Icon = icon;
+        tray.Text = "SiteNavigator";
+        tray.ContextMenuStrip = menu;
+        tray.Visible = true;
+
+        tray.DoubleClick += (s, e) =>
+        {
+            try { Process.Start("http://localhost:" + port); }
+            catch { }
+        };
+
+        return tray;
+    }
+
     private static byte[] ReadEmbeddedCorePayload()
     {
         Assembly assembly = Assembly.GetExecutingAssembly();
