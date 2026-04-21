@@ -4711,7 +4711,6 @@ export default function App() {
   };
 
   const deletedTemplates = useMemo(() => templates.filter((t) => !!t.deletedAt), [templates]);
-  const backupStale = daysSince(lastBackupAt) > 14;
 
   const openCustomer = customers.find((c) => c.id === openCustomerId) || null;
   const openTemplate = templates.find((t) => t.id === templateDetailId) || null;
@@ -6525,8 +6524,7 @@ export default function App() {
           <>
             <Dashboard
               summary={dashboardSummary}
-              backupStale={backupStale}
-              onQuickExport={() => handleExport("full")}
+              syncState={syncState}
               onQuickFilterTag={applyDashboardQuickTag}
               onOpenExplorer={() => setActive("explorer")}
               onHeatmapCellClick={applyHeatmapCellFilter}
