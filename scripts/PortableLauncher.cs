@@ -1,16 +1,21 @@
 using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows.Forms;
 
 internal static class Program
 {
     private const string CoreResourceName = "SiteNavigator.Core.exe";
     private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
     private const int JobObjectExtendedLimitInformation = 9;
+
+    private static volatile bool _restarting = false;
+    private static int _port = 8787;
 
     [STAThread]
     private static int Main()
