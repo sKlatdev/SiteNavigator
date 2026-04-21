@@ -498,7 +498,11 @@ async function runVendorCrawl(ketchBin, vendorRun, store, stats) {
   }
 
   const vendorMs = Date.now() - vendorStart;
-  syncLog(`[${vendorRun.id}] vendor done — ${seenUrls.size} total pages in ${(vendorMs / 1000).toFixed(1)}s`);
+  const vendorThrottleDrop = [
+    stats.throttledCount ? `${stats.throttledCount} throttled` : "",
+    stats.droppedCount ? `${stats.droppedCount} dropped` : "",
+  ].filter(Boolean).join(", ");
+  syncLog(`[${vendorRun.id}] vendor done — ${seenUrls.size} total pages${vendorThrottleDrop ? `, ${vendorThrottleDrop}` : ""} in ${(vendorMs / 1000).toFixed(1)}s`);
   return seenUrls;
 }
 
@@ -613,7 +617,11 @@ export async function runKetchIncrementalSync() {
   });
 
   const totalMs = Date.now() - syncStart;
-  syncLog(`sync ${failed ? "failed" : "done"} — ${stats.scannedCount} pages scanned in ${(totalMs / 1000).toFixed(1)}s`);
+  const syncThrottleDrop = [
+    stats.throttledCount ? `${stats.throttledCount} throttled` : "",
+    stats.droppedCount ? `${stats.droppedCount} dropped` : "",
+  ].filter(Boolean).join(", ");
+  syncLog(`sync ${failed ? "failed" : "done"} — ${stats.scannedCount} pages scanned${syncThrottleDrop ? `, ${syncThrottleDrop}` : ""} in ${(totalMs / 1000).toFixed(1)}s`);
 
   if (failed) {
     throw new Error(failureMessage);
