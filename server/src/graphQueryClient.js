@@ -1,7 +1,37 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { dataDir } from "./store.js";
 
-const gitnexusBin = String(process.env.SITENAVIGATOR_GITNEXUS_BIN || "gitnexus").trim();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isWindows = process.platform === "win32";
+const bundledExeName = isWindows ? "gitnexus.exe" : "gitnexus";
+const bundledGitnexusPath = path.resolve(__dirname, "..", "vendor", "gitnexus", bundledExeName);
+
+function resolveGitnexusBin() {
+  const explicit = String(process.env.SITENAVIGATOR_GITNEXUS_BIN || "").trim();
+  if (explicit) return explicit;
+
+  if (fs.existsSync(bundledGitnexusPath)) {
+    // In a pkg-packaged build, extract to a writable runtime directory
+    if (process.pkg) {
+      const runtimeDir = path.join(dataDir, "runtime");
+      const runtimeExe = path.join(runtimeDir, bundledExeName);
+      fs.mkdirSync(runtimeDir, { recursive: true });
+      const srcSize = fs.statSync(bundledGitnexusPath).size;
+      const needsCopy = !fs.existsSync(runtimeExe) || fs.statSync(runtimeExe).size !== srcSize;
+      if (needsCopy) fs.copyFileSync(bundledGitnexusPath, runtimeExe);
+      return runtimeExe;
+    }
+    return bundledGitnexusPath;
+  }
+
+  return "gitnexus";
+}
+
+const gitnexusBin = resolveGitnexusBin();
 
 const GRAPH_SEARCH_TIMEOUT_MS =
   Number(process.env.SITENAVIGATOR_GRAPH_SEARCH_TIMEOUT_MS) || 5_000;
