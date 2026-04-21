@@ -45,7 +45,8 @@ internal static class Program
         }
 
         string portEnv = Environment.GetEnvironmentVariable("PORT");
-        _port = int.TryParse(portEnv, out int parsedPort) && parsedPort > 0 ? parsedPort : 8787;
+        int parsedPort;
+        _port = int.TryParse(portEnv, out parsedPort) && parsedPort > 0 ? parsedPort : 8787;
 
         System.Threading.SynchronizationContext uiContext =
             System.Threading.SynchronizationContext.Current
