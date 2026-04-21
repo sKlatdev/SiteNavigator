@@ -236,3 +236,14 @@ textarea {
 option {
   @apply bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100;
 }
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-bar-shimmer {
+    animation: none !important;
+  }
+}
