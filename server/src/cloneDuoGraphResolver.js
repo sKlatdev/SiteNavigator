@@ -1,9 +1,8 @@
-import { graphQueryClient } from "./graphQueryClient.js";
+import { graphQueryClient, searchWithTimeout } from "./graphQueryClient.js";
 
 const CONFIDENCE_THRESHOLD = 0.6;
 const MARGIN_THRESHOLD = 0.15;
 const SEARCH_LIMIT = 3;
-const SEARCH_TIMEOUT_MS = 5_000;
 
 // resolveAmbiguityWithGraph: for each candidate value, queries GitNexus and picks
 // the value most corroborated by indexed docs.
@@ -67,13 +66,4 @@ export async function resolveAmbiguityWithGraph(field, candidateValues, context,
     }
     return null;
   }
-}
-
-async function searchWithTimeout(query, opts, client) {
-  return Promise.race([
-    client.search(query, opts),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("search timeout")), SEARCH_TIMEOUT_MS)
-    ),
-  ]).catch(() => []);
 }
