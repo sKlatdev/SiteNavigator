@@ -4,7 +4,7 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { runIncrementalSync, getSelectedSyncEngine, getSyncProgress } from "./syncEngine.js";
+import { runIncrementalSync, getSelectedSyncEngine, getSyncProgress, shouldUseGitNexusSearch } from "./syncEngine.js";
 import { readStore, writeStore, listActiveContent, getLastSyncRun } from "./store.js";
 import { computeRecentSignals } from "./recency.js";
 import { normalizeContentQuality } from "./contentQuality.js";
@@ -306,7 +306,7 @@ app.post("/api/compare/related", async (req, res) => {
     return res.status(400).json({ ok: false, message: "seedUrl required" });
   }
 
-  if (!graphQueryClient.isAvailable()) {
+  if (!shouldUseGitNexusSearch() || !graphQueryClient.isAvailable()) {
     return res.status(503).json({ ok: false, message: "search index unavailable", fallback: true });
   }
 
@@ -406,7 +406,12 @@ export function createGapAnalyzeHandler(client) {
   };
 }
 
-app.post("/api/gap/analyze", createGapAnalyzeHandler(graphQueryClient));
+app.post("/api/gap/analyze", (req, res, next) => {
+  if (!shouldUseGitNexusSearch()) {
+    return res.status(503).json({ ok: false, fallback: true, message: "GitNexus unavailable" });
+  }
+  return createGapAnalyzeHandler(graphQueryClient)(req, res, next);
+});
 
 app.get("/api/sync/status", (_req, res) => {
   const store = readStore();

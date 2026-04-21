@@ -26,3 +26,18 @@ export function getSyncProgress() {
 export async function runIncrementalSync() {
   return selectedEngine() === "ketch" ? runKetchIncrementalSync() : runLegacyIncrementalSync();
 }
+
+function selectedSearchEngine() {
+  const requested = String(process.env.SITENAVIGATOR_SEARCH_ENGINE || "auto").trim().toLowerCase();
+  if (requested === "legacy") return "legacy";
+  if (requested === "gitnexus") return "gitnexus";
+  return "auto";
+}
+
+export function getSelectedSearchEngine() {
+  return selectedSearchEngine();
+}
+
+export function shouldUseGitNexusSearch() {
+  return selectedSearchEngine() !== "legacy";
+}
