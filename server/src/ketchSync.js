@@ -37,7 +37,7 @@ export function classifyKetchError(record) {
   if (record.statusCode === 429 || /429|rate.?limit|too many request/i.test(detail)) {
     return { type: "throttle", detail };
   }
-  if (/ECONNRESET|ECONNREFUSED|connection reset|EOF|timed?\s*out|i\/o timeout/i.test(detail)) {
+  if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|connection reset|EOF|timed?\s*out|i\/o timeout/i.test(detail)) {
     return { type: "drop", detail };
   }
   return { type: "error", detail };

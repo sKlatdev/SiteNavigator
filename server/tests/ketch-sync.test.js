@@ -90,3 +90,8 @@ test("classifyKetchError: boolean error true is error with detail 'true'", () =>
   assert.equal(type, "error");
   assert.equal(detail, "true");
 });
+
+test("classifyKetchError: ETIMEDOUT is drop", () => {
+  const { type } = classifyKetchError({ error: "ETIMEDOUT" });
+  assert.equal(type, "drop");
+});
