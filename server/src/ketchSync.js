@@ -503,6 +503,8 @@ export async function runKetchIncrementalSync() {
     unchangedCount: 0,
     skippedNotModifiedCount: 0,
     errorCount: 0,
+    throttledCount: 0,
+    droppedCount: 0,
   };
 
   addSyncRun(store, {
@@ -516,6 +518,8 @@ export async function runKetchIncrementalSync() {
     unchangedCount: 0,
     skippedNotModifiedCount: 0,
     errorCount: 0,
+    throttledCount: 0,
+    droppedCount: 0,
     message: "Ketch sync started",
   });
 
@@ -535,6 +539,8 @@ export async function runKetchIncrementalSync() {
     unchangedCount: 0,
     skippedNotModifiedCount: 0,
     errorCount: 0,
+    throttledCount: 0,
+    droppedCount: 0,
     currentUrl: (Array.isArray(KETCH_VENDOR_RUNS[0]?.seeds) ? KETCH_VENDOR_RUNS[0].seeds[0] : KETCH_VENDOR_RUNS[0]?.seed) || null,
     currentDepth: 0,
     percent: 0,
@@ -574,6 +580,8 @@ export async function runKetchIncrementalSync() {
     unchangedCount: stats.unchangedCount,
     skippedNotModifiedCount: stats.skippedNotModifiedCount,
     errorCount: stats.errorCount + (failed ? 1 : 0),
+    throttledCount: stats.throttledCount,
+    droppedCount: stats.droppedCount,
     message: failed ? failureMessage : "Ketch sync completed",
   });
   writeStore(store);
