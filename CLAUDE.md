@@ -41,7 +41,7 @@ Ketch crawl → server/data/gitnexus-docs/<vendor>/ → gitnexus analyze → .gi
 | `SITENAVIGATOR_SEARCH_ENGINE` | `auto` | `gitnexus`, `legacy`, or `auto` (gitnexus-first with fallback) |
 | `SITENAVIGATOR_KETCH_BIN` | (bundled) | Path to ketch binary; overrides bundled binary |
 | `SITENAVIGATOR_KETCH_DEPTH` | `3` | BFS crawl depth per vendor |
-| `SITENAVIGATOR_KETCH_CONCURRENCY` | `8` | Concurrent crawl workers |
+| `SITENAVIGATOR_KETCH_CONCURRENCY` | `48` | Concurrent crawl workers |
 | `SITENAVIGATOR_GITNEXUS_BIN` | `gitnexus` | Path to gitnexus binary (must be on PATH or set explicitly) |
 | `SITENAVIGATOR_OPEN_BROWSER` | `true` | Set `false` to disable auto browser open on launch |
 | `PORT` | `8787` | Server port |
