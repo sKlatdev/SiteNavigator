@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applySeenUrlsForVendor, isEnglishContentUrl, mapKetchResultToRow } from "../src/ketchSync.js";
+import { applySeenUrlsForVendor, isEnglishContentUrl, mapKetchResultToRow, classifyKetchError } from "../src/ketchSync.js";
 
 test("mapKetchResultToRow preserves quality and derives competitor metadata", () => {
   const mapped = mapKetchResultToRow({
@@ -52,4 +52,41 @@ test("isEnglishContentUrl rejects nested non-English locale paths", () => {
   assert.equal(isEnglishContentUrl("https://help.okta.com/oie/ja-jp/content/topics/example.htm"), false);
   assert.equal(isEnglishContentUrl("https://docs.pingidentity.com/r/en-us/pingfederate-120/example"), true);
   assert.equal(isEnglishContentUrl("https://saml-doc.okta.com/SAML_Docs/How-to-Configure-SAML-2.0-for-Cisco-ASA-VPN.html"), true);
+});
+
+test("classifyKetchError: statusCode 429 is throttle", () => {
+  const { type, detail } = classifyKetchError({ statusCode: 429 });
+  assert.equal(type, "throttle");
+  assert.ok(detail.includes("429"));
+});
+
+test("classifyKetchError: error string '429 Too Many Requests' is throttle", () => {
+  const { type } = classifyKetchError({ error: "429 Too Many Requests" });
+  assert.equal(type, "throttle");
+});
+
+test("classifyKetchError: error string 'rate limit exceeded' is throttle", () => {
+  const { type } = classifyKetchError({ error: "rate limit exceeded" });
+  assert.equal(type, "throttle");
+});
+
+test("classifyKetchError: ECONNRESET is drop", () => {
+  const { type } = classifyKetchError({ error: "ECONNRESET" });
+  assert.equal(type, "drop");
+});
+
+test("classifyKetchError: 'connection timed out' is drop", () => {
+  const { type } = classifyKetchError({ error: "connection timed out" });
+  assert.equal(type, "drop");
+});
+
+test("classifyKetchError: 404 Not Found is error", () => {
+  const { type } = classifyKetchError({ error: "404 Not Found" });
+  assert.equal(type, "error");
+});
+
+test("classifyKetchError: boolean error true is error with detail 'true'", () => {
+  const { type, detail } = classifyKetchError({ error: true });
+  assert.equal(type, "error");
+  assert.equal(detail, "true");
 });

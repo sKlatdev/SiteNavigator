@@ -30,6 +30,19 @@ const ketchDepth = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_DEPTH || 3
 const ketchConcurrency = Math.max(1, Number(process.env.SITENAVIGATOR_KETCH_CONCURRENCY || 8));
 const slowCrawlPageMs = Math.max(0, Number(process.env.SITENAVIGATOR_SLOW_CRAWL_PAGE_MS || 5000));
 
+export function classifyKetchError(record) {
+  const detail = record.error != null
+    ? (typeof record.error === "string" ? record.error : JSON.stringify(record.error))
+    : String(record.statusCode ?? "unknown error");
+  if (record.statusCode === 429 || /429|rate.?limit|too many request/i.test(detail)) {
+    return { type: "throttle", detail };
+  }
+  if (/ECONNRESET|ECONNREFUSED|connection reset|EOF|timed?\s*out|i\/o timeout/i.test(detail)) {
+    return { type: "drop", detail };
+  }
+  return { type: "error", detail };
+}
+
 function syncLog(msg) {
   console.log(`[sync ${new Date().toISOString()}] ${msg}`);
 }
