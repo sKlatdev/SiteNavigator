@@ -85,3 +85,42 @@ npm run build:portable                       # Full portable build from root
 | 3 | ✅ Shipped | `cloneDuoGraphResolver` — ambiguity resolution for conflicting SAML candidates |
 | 4 | 🔄 In progress | Graph-backed resolution for missing SAML fields |
 | 5 | 📋 Planned | Replace DOM traversal in `cloneDuoExtraction.js` with graph extraction |
+
+## Impeccable UI Recommendations
+
+After **every edit** to any file in `client/src/`, scan the change against the table below. For each matching signal, append an **"Impeccable Recommendations"** block to your response containing:
+
+1. The slash command to run (e.g. `/audit`)
+2. What the command does
+3. Which specific part of the change it targets
+4. What outcome to expect
+
+When asked "what should I run here?" or similar, read the current state of `client/src/` files and return the same format for the most relevant signals.
+
+### Command-to-Trigger Mapping
+
+| Change Signal | Commands to Recommend |
+|---|---|
+| New component added | `/audit`, `/critique`, `/harden` |
+| Layout / spacing / grid changes | `/layout`, `/audit` |
+| Color additions or changes | `/colorize`, `/audit` |
+| Typography / font / text sizing | `/typeset`, `/clarify` |
+| Animation or transitions added | `/animate` |
+| Form fields, inputs, validation UI | `/harden`, `/audit`, `/clarify` |
+| Loading states, empty states, errors | `/harden`, `/delight` |
+| Modal, drawer, overlay added | `/critique`, `/audit` |
+| Design feels flat or generic | `/bolder`, `/colorize` |
+| Design feels cluttered or heavy | `/quieter`, `/distill` |
+| New page or major feature area | `/critique`, `/audit`, `/polish` |
+| Pre-ship / final cleanup | `/polish`, `/audit` |
+| Performance concern (large renders) | `/optimize` |
+| Responsive/mobile considerations | `/adapt`, `/audit` |
+| Extraordinary visual effect wanted | `/overdrive` |
+
+### Recommendation Format Example
+
+> **Impeccable Recommendations**
+>
+> **/audit** — Runs technical quality checks (accessibility, performance, responsive). Targets the new modal you just added: it will check focus trapping, ARIA roles, and keyboard dismissal. Expected outcome: a report of issues with specific fixes.
+>
+> **/critique** — UX design review of hierarchy, clarity, and emotional resonance. Targets the modal layout: it will assess whether the information hierarchy guides the user correctly. Expected outcome: design feedback with suggested improvements.
