@@ -1,0 +1,172 @@
+This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+1. Primary Request and Intent:
+   The user requested a full UI overhaul plan for SiteNavigator (`C:\Admin\Projects\SiteNavigator\duo-sitenavigator`). The design schema is the "Soft Intelligence" aesthetic (obsidian + indigo glassmorphism, defined in `docs/superpowers/Braindumps/DesignSchema.md`). After brainstorming (previous session), the user approved the spec and wants a comprehensive single implementation plan covering all three phases. The user then interrupted to switch models and asked for a continuation prompt.
+
+2. Key Technical Concepts:
+   - Glassmorphism: multi-layered translucent surfaces with backdrop-filter blur
+   - Obsidian-only theme (no light mode) with Indigo Soft accent (#818cf8)
+   - React 19 + Vite 8 + Tailwind CSS 3.4
+   - react-router-dom with createBrowserRouter (real URLs, not hash routing)
+   - Radix UI headless primitives (Dialog, DropdownMenu, Tabs, Tooltip, Select, Toast)
+   - @fontsource packages for offline font bundling (required for portable Ketch build)
+   - Four-layer architecture: tokens → shell → primitives → feature views
+   - Three phases: Phase 1 (tokens+shell+router), Phase 2 (view extraction), Phase 3 (Radix primitives)
+   - React Context split into 4 narrow contexts to prevent re-render storms
+   - clsx (no tailwind-merge or cva)
+   - Node native test runner: `node --test tests/unit/**/*.test.mjs` (NOT Vitest)
+   - Anti-flicker CSS escape hatches preserved: content-stable-paint, app-stable-paint, catalog-grid
+   - SPA fallback already in server.js:810 — no server change needed
+
+3. Files and Code Sections:
+   - `docs/superpowers/specs/2026-04-22-ui-overhaul-design.md` — COMMITTED spec (commit 351f99e). Contains full design with all token values, shell composition, routing config, decomposition map, phase order, risks. READ IN FULL in current session.
+   - `client/src/App.jsx` — 6,868 lines with ~30 useState blocks in App(). Sidebar at line 524. Main render at line 6327. To shrink to <300 lines after Phase 2.
+   - `client/src/glass-tokens.css` — 23 lines of cyan/teal tokens to be replaced by new tokens.css
+   - `client/src/index.css` — Google Fonts CDN import at line 1 to be replaced. Has escape hatches to preserve.
+   - `client/src/main.jsx` — imports glass-tokens.css, to get @fontsource imports added
+   - `client/tailwind.config.js` — minimal, needs theme extensions for CSS variable utilities
+   - `client/package.json` — React 19.2.0, lucide-react, Vite 8. NO react-router, NO Radix yet. Test: `node --test tests/unit/**/*.test.mjs`
+   - `server/src/server.js:810` — SPA fallback confirmed, no change needed
+   - `docs/superpowers/plans/` — directory exists, contains 7 existing plan files
+
+   Token values from spec:
+   ```css
+   :root {
+     --bg-base:        #051424;
+     --bg-panel:       rgba(13, 28, 45, 0.85);
+     --bg-overlay:     rgba(30, 41, 59, 0.9);
+     --border-subtle:  #2c3a4c;
+     --border-strong:  #3b4d63;
+     --accent:         #818cf8;
+     --accent-hover:   #6366f1;
+     --accent-press:   #4f46e5;
+     --success:        #34d399;
+     --warning:        #fbbf24;
+     --critical:       #fb7185;
+     --text-primary:   #fafafa;
+     --text-secondary: #a1a1aa;
+     --text-tertiary:  #71717a;
+     --radius-container: 1rem;
+     --radius-control:   0.5rem;
+     --radius-pill:      9999px;
+     --blur-panel:   18px;
+     --blur-overlay: 24px;
+     --motion-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
+     --motion-medium: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+     --shadow-panel:   0 8px 32px rgba(0, 0, 0, 0.32);
+     --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.5);
+     --glow-focus:     0 0 0 3px rgba(129, 140, 248, 0.35);
+   }
+   ```
+
+   AppLayout from spec:
+   ```jsx
+   <div className="min-h-screen bg-bg-base text-text-primary">
+     <Sidebar />
+     <div className="ml-[200px] flex min-h-screen flex-col">
+       <TopBar />
+       <main className="flex-1 p-6"><Outlet /></main>
+     </div>
+   </div>
+   ```
+
+4. Errors and fixes:
+   - Spec initially said "Vitest" — actual project uses Node native test runner (`node --test tests/unit/**/*.test.mjs`). Noted to ensure plan uses correct test commands.
+   - App.jsx was ~2,700 lines per user's initial description — actual is 6,868 lines. Reported to user.
+   - `.superpowers/` was not in .gitignore — fixed before committing spec.
+
+5. Problem Solving:
+   - Resolved SPA fallback question by grepping server.js — no server change needed
+   - Resolved font loading: CDN must be replaced with @fontsource/* for portable build
+   - Chose 4 narrow contexts over one mega-context to prevent re-render storms
+   - Sidebar simplified: vendor entries only (no per-content-type sub-nav)
+   - Phase 3 modal migration: keep BaseModal shim API during 3.1, migrate callsites in 3.3
+
+6. All user messages:
+   - "I need to plan a full UI overhaul for the SiteNavigator project... Please start by brainstorming the overhaul plan. Read the design schema and the existing UI files before asking questions"
+   - "Yes" (accepting visual companion)
+   - "Reskin + full restructure" (Q1)
+   - "Obsidian-only (drop light)" (Q2)
+   - "Option A" (Q3 sidebar)
+   - "Add react-router with real URLs" (Q4)
+   - "Phased: tokens → views → primitives" (Q5)
+   - "Headless lib (Radix UI) + our styling" (Q6)
+   - "Yes" (Section 1 architecture approved)
+   - "Good to go" (Section 2 tokens approved)
+   - "Yes continue" (Section 3 shell approved)
+   - "This looks good" (Section 4 decomposition approved)
+   - "Yes" (Section 5 primitives approved)
+   - "Looks good!" (Section 6 risks approved)
+   - "This looks good, continue" (spec approved)
+   - "All three phases in one plan" (plan scope)
+   - "Simplified — vendor entries only, filter by category inside catalog" (sidebar nav depth)
+   - "Continue, you were interrupted" (after first compaction)
+   - "Hitting a guard, can you generate a prompt to continue in a new session?"
+
+7. Pending Tasks:
+   - Write comprehensive 3-phase implementation plan to `docs/superpowers/plans/2026-04-22-ui-overhaul-plan.md`
+   - Self-review plan for spec coverage, placeholder scan, type consistency
+   - Offer execution choice (subagent-driven vs inline execution)
+
+8. Current Work:
+   Immediately before the interruption, I had:
+   - Invoked the writing-plans skill
+   - Set TodoWrite todos (Writing implementation plan: in_progress, Self-reviewing plan: pending, Offering execution choice: pending)
+   - Read the spec file in full to get exact token values and architecture details
+   - Confirmed `docs/superpowers/plans/` exists
+   - Was about to call the Write tool to create the plan file
+
+   The plan structure mapped out:
+   - Phase 1 tasks (~1-13): Add deps (react-router-dom, clsx, @fontsource/inter, @fontsource/jetbrains-mono), create tokens.css, update tailwind.config, refactor index.css, create navConfig/Sidebar/TopBar/AppLayout/router, swap App.jsx for RouterProvider, smoke test
+   - Phase 2 tasks (~14-26): Create 4 context split (SyncContext, IndexedContentContext, CustomersTemplatesContext, UIContext), extract views in order: Dashboard → Audit/Checklist → Watchlist/Gap/Evidence → Customers+Templates → Catalog → Compare → Sync/Settings, verify App.jsx <300 lines
+   - Phase 3 tasks (~27-38): Add Radix deps, migrate Dialog (3.1 keep BaseModal shim, 3.2 ConfirmDialog, 3.3 per-feature migration), migrate Tooltip/DropdownMenu/Tabs/Select/Toast/Button/Card/Input/Badge/EmptyState, delete legacy shim, final cleanup
+
+9. Optional Next Step:
+   Write the implementation plan file. The user's most recent task context:
+
+   "All three phases in one plan" — user's instruction on plan scope
+   "Simplified — vendor entries only, filter by category inside catalog" — final clarification on sidebar nav
+
+   Continue by writing `docs/superpowers/plans/2026-04-22-ui-overhaul-plan.md` with the full 3-phase plan. Use the writing-plans skill template with:
+   - Standard plan header referencing superpowers:subagent-driven-development or superpowers:executing-plans
+   - Bite-sized TDD tasks (each with file paths, actual code, exact commands with expected output, commit steps)
+   - Phase 1: tokens+shell+router (add deps, tokens.css, index.css refactor, shell files, router, smoke test)
+   - Phase 2: view extraction in spec-defined order with context split
+   - Phase 3: Radix migration with 3-stage modal approach
+   - Then self-review and offer execution choice
+
+   CRITICAL: use `node --test tests/unit/**/*.test.mjs` (NOT `npx vitest`) for all test commands.
+   CRITICAL: use `npm install --prefix client` for all client dependency installs.
+   CRITICAL: plan file lives at `docs/superpowers/plans/2026-04-22-ui-overhaul-plan.md`
+
+---
+
+**Continuation prompt for new session:**
+
+```
+I need you to continue writing an implementation plan for the SiteNavigator UI overhaul project at `C:\Admin\Projects\SiteNavigator\duo-sitenavigator`.
+
+Context:
+- Brainstorming is COMPLETE. The approved design spec is committed at `docs/superpowers/specs/2026-04-22-ui-overhaul-design.md`. READ THIS FILE FIRST.
+- I already confirmed: all three phases in one plan, simplified sidebar (vendor entries only, no per-content-type sub-nav).
+- You are in the middle of the writing-plans skill execution. Resume it.
+
+Your task is to write the comprehensive 3-phase implementation plan to:
+`docs/superpowers/plans/2026-04-22-ui-overhaul-plan.md`
+
+Key constraints for the plan:
+- Test command is `npm run test:unit --prefix client` which runs `node --test tests/unit/**/*.test.mjs` — do NOT use `npx vitest`
+- Dependency installs use `npm install --prefix client`  
+- Phase 1: Add react-router-dom, clsx, @fontsource/inter, @fontsource/jetbrains-mono to client. Create tokens.css, update tailwind.config.js, refactor index.css (remove CDN import + swap cyan/teal tokens + preserve escape hatches), create shell/ files (navConfig.js, Sidebar.jsx, TopBar.jsx, AppLayout.jsx, router.jsx), wire RouterProvider into App.jsx, smoke test.
+- Phase 2: Create 4 narrow contexts (SyncContext, IndexedContentContext, CustomersTemplatesContext, UIContext) in hooks/useAppData.jsx, then extract feature views in this order: Dashboard → Audit/Checklist → Watchlist/Gap/Evidence → Customers+Templates → Catalog → Compare → Sync/Settings. Target: App.jsx < 300 lines.
+- Phase 3 (Radix): Add @radix-ui packages. 3.1 — swap BaseModal internals to Radix Dialog keeping same prop API as shim. 3.2 — ConfirmDialog. 3.3 — migrate each feature's modals directly to Dialog, then delete BaseModal shim. Also migrate Tooltip/DropdownMenu/Tabs/Select/Toast and lift Button/Card/Input/Badge/EmptyState to primitives/.
+- Use the writing-plans skill format: each task has Files (create/modify/test), bite-sized steps with actual code, exact commands with expected output, and a commit step.
+- After writing, self-review the plan against the spec for coverage, placeholders, and type consistency.
+- Then offer the execution choice (subagent-driven vs inline).
+
+The `docs/superpowers/plans/` directory already exists. Start writing immediately.
+```
+
+If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: C:\Users\jyother\.claude\projects\c--Admin-Projects-SiteNavigator-duo-sitenavigator\b947c9a2-defe-4416-b469-407bb44adbf4.jsonl
+Continue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with "I'll continue" or similar. Pick up the last task as if the break never happened.

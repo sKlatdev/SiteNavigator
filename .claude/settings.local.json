@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(curl *)",
+      "Bash(python3 *)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(head *)",
+      "Bash(wc *)",
+      "Bash(git *)",
+      "Skill(update-config)"
+    ]
+  }
+}

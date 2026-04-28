@@ -30,6 +30,7 @@ const START_POINTS = [
   "https://help.okta.com",
   "https://saml-doc.okta.com",
   "https://docs.pingidentity.com",
+  "https://docs.pingidentity.com/integrations/",
   "https://learn.microsoft.com/en-us/entra/identity/saas-apps",
   "https://learn.microsoft.com/en-us/entra/identity/saas-apps/tutorial-list"
 ];
