@@ -1,0 +1,98 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - link [ref=e7] [cursor=pointer]:
+      - /url: /app/home
+      - img [ref=e8]
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - button [ref=e12] [cursor=pointer]:
+          - img [ref=e16]
+        - link [ref=e20] [cursor=pointer]:
+          - /url: /app/home
+          - img [ref=e25]
+      - navigation [ref=e28]:
+        - generic [ref=e31]: Home
+      - generic [ref=e32]:
+        - button [ref=e36] [cursor=pointer]:
+          - generic [ref=e43]: j
+        - button [ref=e48] [cursor=pointer]:
+          - img [ref=e52]
+    - main [ref=e58]:
+      - generic [ref=e61]:
+        - heading [level=1] [ref=e66]: Home
+        - generic [ref=e68]:
+          - link [ref=e71] [cursor=pointer]:
+            - /url: /app/home#/tutorial_directory
+            - generic [ref=e72]:
+              - img [ref=e73]
+              - generic [ref=e75]: Add data
+          - link [ref=e78] [cursor=pointer]:
+            - /url: /app/management
+            - generic [ref=e79]:
+              - img [ref=e80]
+              - generic [ref=e82]: Manage
+          - link [ref=e85] [cursor=pointer]:
+            - /url: /app/dev_tools#/console
+            - generic [ref=e86]:
+              - img [ref=e87]
+              - generic [ref=e89]: Dev tools
+      - generic [ref=e90]:
+        - region [ref=e91]:
+          - heading [level=2] [ref=e92]: Pick your solution
+          - link [ref=e95] [cursor=pointer]:
+            - /url: /app/opensearch_dashboards_overview
+            - generic [ref=e97]:
+              - generic [ref=e100]:
+                - heading [level=3] [ref=e102]: OpenSearch Dashboards
+                - paragraph [ref=e104]:
+                  - text: Visualize & analyze
+                  - img [ref=e105]
+              - generic [ref=e107]:
+                - paragraph [ref=e109]: Analyze data in dashboards.
+                - paragraph [ref=e112]: Search and find insights.
+        - separator [ref=e113]
+        - generic [ref=e114]:
+          - region [ref=e116]:
+            - heading [level=2] [ref=e119]: Ingest your data
+            - generic [ref=e123]:
+              - img [ref=e125]
+              - generic [ref=e127]:
+                - heading [level=3] [ref=e128]:
+                  - link [ref=e129] [cursor=pointer]:
+                    - /url: /app/home#/tutorial_directory
+                    - text: Add sample data
+                - paragraph [ref=e131]: Get started with sample data, visualizations, and dashboards.
+          - region [ref=e133]:
+            - heading [level=2] [ref=e134]: Manage your data
+            - generic [ref=e138]:
+              - img [ref=e140]
+              - generic [ref=e144]:
+                - heading [level=3] [ref=e145]:
+                  - link [ref=e146] [cursor=pointer]:
+                    - /url: /app/dev_tools#/console
+                    - text: Interact with the OpenSearch API
+                - paragraph [ref=e148]: Skip cURL and use a JSON interface to work with your data in Console.
+        - separator [ref=e149]
+        - link [ref=e155] [cursor=pointer]:
+          - /url: /app/home#/feature_directory
+          - generic [ref=e156]:
+            - img [ref=e157]
+            - generic [ref=e159]: View app directory
+  - generic [active] [ref=e162]:
+    - button "Closes this modal window" [ref=e163] [cursor=pointer]:
+      - img
+    - generic [ref=e164]:
+      - generic [ref=e166]: Introducing new OpenSearch Dashboards look & feel
+      - generic [ref=e168]:
+        - generic [ref=e170]:
+          - text: You are now previewing the newest OpenSearch Dashboards theme with improved light and dark modes. You or your administrator can change to the previous theme by visiting
+          - link "Advanced Settings" [ref=e171] [cursor=pointer]:
+            - /url: /app/management/opensearch-dashboards/settings#appearance
+          - text: .
+        - generic [ref=e173]:
+          - figure [ref=e175]:
+            - img "screenshot of new theme in light mode" [ref=e176]
+          - figure [ref=e178]:
+            - img "screenshot of new theme in dark mode" [ref=e179]
+      - button "Dismiss" [ref=e181] [cursor=pointer]:
+        - generic [ref=e183]: Dismiss

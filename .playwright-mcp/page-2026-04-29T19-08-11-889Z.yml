@@ -1,0 +1,6 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e5]:
+    - img [ref=e8]
+    - contentinfo [ref=e10]:
+      - generic [ref=e12]: Secured by Duo
+  - log [ref=e13]: Now on page called, Loading
