@@ -1,14 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
 
-// Placeholder components for Phase 2 view extraction
-const PlaceholderPage = ({ name }) => (
-  <div className="rounded-container bg-bg-panel p-6">
-    <h1 className="text-2xl font-semibold text-text-primary">{name}</h1>
-    <p className="mt-2 text-text-secondary">This page will be implemented in Phase 2.</p>
-  </div>
-)
-
 export const router = createBrowserRouter([
   {
     element: <AppLayout />,
@@ -17,57 +9,93 @@ export const router = createBrowserRouter([
       {
         path: '/',
         lazy: async () => {
-          const { Dashboard } = await import('../features/Dashboard')
-          return { Component: Dashboard }
+          const { DashboardView } = await import('../features/dashboard/DashboardView')
+          return { Component: DashboardView }
         },
       },
       {
         path: '/audit',
-        element: <PlaceholderPage name="Audit" />,
+        lazy: async () => {
+          const { AuditView } = await import('../features/audit/AuditView')
+          return { Component: AuditView }
+        },
       },
       {
         path: '/checklist',
-        element: <PlaceholderPage name="Checklist" />,
+        lazy: async () => {
+          const { ChecklistView } = await import('../features/checklist/ChecklistView')
+          return { Component: ChecklistView }
+        },
       },
       {
         path: '/watchlist',
-        element: <PlaceholderPage name="Watchlist" />,
+        lazy: async () => {
+          const { WatchlistView } = await import('../features/watchlist/WatchlistView')
+          return { Component: WatchlistView }
+        },
       },
       {
         path: '/gap',
-        element: <PlaceholderPage name="Gap Analysis" />,
+        lazy: async () => {
+          const { GapView } = await import('../features/gap/GapView')
+          return { Component: GapView }
+        },
       },
       {
         path: '/evidence',
-        element: <PlaceholderPage name="Evidence" />,
+        lazy: async () => {
+          const { EvidenceView } = await import('../features/evidence/EvidenceView')
+          return { Component: EvidenceView }
+        },
       },
       {
         path: '/customers',
-        element: <PlaceholderPage name="Customers" />,
+        lazy: async () => {
+          const { CustomersView } = await import('../features/customers/CustomersView')
+          return { Component: CustomersView }
+        },
       },
       {
         path: '/templates',
-        element: <PlaceholderPage name="Templates" />,
+        lazy: async () => {
+          const { TemplatesView } = await import('../features/templates/TemplatesView')
+          return { Component: TemplatesView }
+        },
       },
       {
         path: '/catalog',
-        element: <PlaceholderPage name="Catalog" />,
+        lazy: async () => {
+          const { CatalogView } = await import('../features/catalog/CatalogView')
+          return { Component: CatalogView }
+        },
       },
       {
         path: '/compare',
-        element: <PlaceholderPage name="Compare" />,
-      },
-      {
-        path: '/sync',
-        element: <PlaceholderPage name="Sync" />,
+        lazy: async () => {
+          const { CompareView } = await import('../features/compare/CompareView')
+          return { Component: CompareView }
+        },
       },
       {
         path: '/clone-duo',
-        element: <PlaceholderPage name="Clone Duo" />,
+        lazy: async () => {
+          const { CloneDuoView } = await import('../features/cloneDuo/CloneDuoView')
+          return { Component: CloneDuoView }
+        },
+      },
+      {
+        path: '/sync',
+        lazy: async () => {
+          const { SyncView } = await import('../features/sync/SyncView')
+          return { Component: SyncView }
+        },
       },
       {
         path: '/settings',
-        element: <PlaceholderPage name="Settings" />,
+        lazy: async () => {
+          const { SettingsView } = await import('../features/settings/SettingsView')
+          return { Component: SettingsView }
+        },
       },
       {
         path: '*',
