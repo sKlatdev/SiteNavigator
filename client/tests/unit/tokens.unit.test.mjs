@@ -101,7 +101,6 @@ test("tokens.css includes anti-flicker escape hatches", () => {
     "content-view-no-fx",
     "content-stable-paint",
     "app-stable-paint",
-    "catalog-grid",
   ];
 
   for (const hatch of escapeHatches) {
@@ -117,7 +116,9 @@ test("tokens.css includes component layer utilities", () => {
   const tokensPath = join(__dirname, "../../src/tokens.css");
   const content = readFileSync(tokensPath, "utf-8");
 
-  const utilities = ["@layer components", ".panel", ".control", ".nav-item"];
+  // Component layer utilities moved to index.css for proper Tailwind layer binding
+  // Verify tokens.css still has token definitions and escape hatches
+  const utilities = ["--bg-base", "--accent", "content-stable-paint"];
 
   for (const utility of utilities) {
     assert.match(

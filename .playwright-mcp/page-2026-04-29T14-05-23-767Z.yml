@@ -1,0 +1,14 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: "[plugin:vite:import-analysis] Failed to resolve import \"../features/Dashboard\" from \"src/shell/router.jsx\". Does the file exist?"
+  - generic [ref=e5]: C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/src/shell/router.jsx:20:45
+  - generic [ref=e6]: "42 | path: \"/\", 43 | lazy: async () => { 44 | const { Dashboard } = await import(\"../features/Dashboard\"); | ^ 45 | return { Component: Dashboard }; 46 | }"
+  - generic [ref=e7]: at TransformPluginContext._formatLog (file:///C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/node_modules/vite/dist/node/chunks/node.js:30209:39) at TransformPluginContext.error (file:///C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/node_modules/vite/dist/node/chunks/node.js:30206:14) at normalizeUrl (file:///C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/node_modules/vite/dist/node/chunks/node.js:27496:18) at async file:///C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/node_modules/vite/dist/node/chunks/node.js:27559:30 at async Promise.all (index 3) at async TransformPluginContext.transform (file:///C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/node_modules/vite/dist/node/chunks/node.js:27527:4) at async EnvironmentPluginContainer.transform (file:///C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/node_modules/vite/dist/node/chunks/node.js:29998:14) at async loadAndTransform (file:///C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/node_modules/vite/dist/node/chunks/node.js:24133:26)
+  - generic [ref=e8]:
+    - text: Click outside, press Esc key, or fix the code to dismiss.
+    - text: You can also disable this overlay by setting
+    - code [ref=e9]: server.hmr.overlay
+    - text: to
+    - code [ref=e10]: "false"
+    - text: in
+    - code [ref=e11]: vite.config.js
+    - text: .

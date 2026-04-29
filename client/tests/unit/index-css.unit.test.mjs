@@ -149,3 +149,18 @@ test("index.css includes background and text accent classes", () => {
   assert.match(content, /\.bg-accent/, "index.css should include .bg-accent");
   assert.match(content, /\.text-accent/, "index.css should include .text-accent");
 });
+
+test("index.css includes component layer utilities", () => {
+  const indexCssPath = join(__dirname, "../../src/index.css");
+  const content = readFileSync(indexCssPath, "utf-8");
+
+  const utilities = ["@layer components", ".panel", ".control", ".nav-item"];
+
+  for (const utility of utilities) {
+    assert.match(
+      content,
+      new RegExp(utility),
+      `index.css should include ${utility}`
+    );
+  }
+});

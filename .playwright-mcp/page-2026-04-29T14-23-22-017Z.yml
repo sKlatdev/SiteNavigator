@@ -1,0 +1,14 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: "[plugin:vite:css] [postcss] C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/src/tokens.css:70:1: `@layer components` is used but no matching `@tailwind components` directive is present."
+  - generic [ref=e5]: C:/Admin/Projects/SiteNavigator/duo-sitenavigator/client/src/tokens.css:70:0
+  - generic [ref=e6]: "68 | } 69 | 70 | @layer components { | ^ 71 | /* Panel surface — translucent with blur */ 72 | .panel {"
+  - generic [ref=e7]: at Input.error (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\postcss\lib\input.js:135:16) at AtRule.error (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\postcss\lib\node.js:146:32) at normalizeTailwindDirectives (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\tailwindcss\lib\lib\normalizeTailwindDirectives.js:72:32) at C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\tailwindcss\lib\processTailwindFeatures.js:29:98 at plugins (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\tailwindcss\lib\plugin.js:38:69) at LazyResult.runOnRoot (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\postcss\lib\lazy-result.js:361:16) at LazyResult.runAsync (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\postcss\lib\lazy-result.js:290:26) at LazyResult.async (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\postcss\lib\lazy-result.js:192:30) at LazyResult.then (C:\Admin\Projects\SiteNavigator\duo-sitenavigator\client\node_modules\postcss\lib\lazy-result.js:436:17)
+  - generic [ref=e8]:
+    - text: Click outside, press Esc key, or fix the code to dismiss.
+    - text: You can also disable this overlay by setting
+    - code [ref=e9]: server.hmr.overlay
+    - text: to
+    - code [ref=e10]: "false"
+    - text: in
+    - code [ref=e11]: vite.config.js
+    - text: .

@@ -1,0 +1,10 @@
+- generic [ref=e3]:
+  - img [ref=e6]
+  - heading "Single Sign-On" [level=1] [ref=e8]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Email Address
+      - textbox "Email Address" [active] [ref=e12]
+    - button "Next" [disabled] [ref=e13]
+  - contentinfo:
+    - generic [ref=e16]: Secured by Duo
