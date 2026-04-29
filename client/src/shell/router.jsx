@@ -99,7 +99,10 @@ export const router = createBrowserRouter([
       },
       {
         path: '*',
-        element: <NotFound />,
+        lazy: async () => {
+          const { NotFoundView } = await import('../features/notfound/NotFoundView')
+          return { Component: NotFoundView }
+        },
       },
     ],
   },
@@ -110,15 +113,6 @@ function ErrorBoundary() {
     <div className="rounded-container bg-critical/10 border border-critical p-6">
       <h1 className="text-lg font-semibold text-critical">Something went wrong</h1>
       <p className="mt-2 text-text-secondary">Please try refreshing the page.</p>
-    </div>
-  )
-}
-
-function NotFound() {
-  return (
-    <div className="rounded-container bg-bg-panel p-6">
-      <h1 className="text-2xl font-semibold text-text-primary">Page not found</h1>
-      <p className="mt-2 text-text-secondary">The page you are looking for does not exist.</p>
     </div>
   )
 }
